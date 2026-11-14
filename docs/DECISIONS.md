@@ -170,3 +170,10 @@ Jupiter, Saturn, Uranus and Neptune become map/mission destinations alongside th
 Give platforms a condition-scaled 6-energy command supply so weak sunlight does not make them unusable before expansion. Condensers/refineries reuse water/material building mechanics with appropriate names. Their technology and all coefficients are fictional game balance. Blocked currents/vortices, condensate deposits, site preparation, ring shadows and weak light preserve meaningful site and supply choices.
 
 Do not expand or relabel the existing four-destination GMAT table. New outer routes, Earth launch energy/direction, capture allowances and light-time approximations are explicit estimates. Retain rocket mass checks and propellant checks, hide nonexistent launch windows, and identify estimated light-times in the map. Live browser verification remains pending under the earlier preview denial; use engine/HTTP/controller checks and offline production-Canvas renders.
+
+
+## D-021 — Interactive tutorial and Settings
+
+**Status:** Implemented on `feature/tutorial`. **Date:** 2026-11-15. **Reason:** User asked for a typical game tutorial with mechanics, objectives and hints, closable and restartable from settings.
+
+Use spotlight coach marks over the real interface rather than a separate sandbox, so the player learns the actual controls. Action steps wait for the real action and advance on their own, but SKIP STEP is always offered so no one gets stuck. The tutorial is presentation only: it reads state, never changes it, and stores its progress as a browser preference (not in the Python-validated save). Settings is a new ⚙ dialog for tutorial control plus the existing guide-card and ambient-motion preferences. The overlay sits above the map HUD but below the solar navigator, dialogs and flight animations.

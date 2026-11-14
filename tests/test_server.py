@@ -46,7 +46,7 @@ class ServerTests(unittest.TestCase):
         status, mime, css = self.request("/campaign.css")
         self.assertEqual((status, mime), (200, "text/css"))
         self.assertIn(b".terrain-map", css)
-        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css")):
+        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css"),("/tutorial.js", "text/javascript"),("/tutorial.css", "text/css")):
             code, kind, body = self.request(path)
             self.assertEqual((code,kind),(200,expected_type))
             self.assertGreater(len(body),100)

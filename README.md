@@ -17,6 +17,10 @@ Open **http://127.0.0.1:8000**. Keep the terminal open. Change port with `--port
 
 Existing saves retain their hubs and progress. To use the Mars-only beginning with no Earth hub, select **↻ New campaign → Start on Mars**; this replaces the current save.
 
+## Tutorial
+
+New players are offered a guided tutorial on first load. It spotlights the real controls, explains each mechanic, gives a hint per step, and waits for you to act (scan a sector, build, end the turn, test flight software, launch). Five chapters: Welcome, Explore & build, Stay alive, First mission, Programme. **SKIP STEP** never leaves you stuck, ✕ closes it, and **⚙ Settings** (top right) resumes, closes or restarts it, and also toggles the first-mission guide card and ambient map motion. Progress is a per-browser preference, separate from the game save.
+
 ## Campaign controls
 
 1. **Start on Mars:** New campaigns begin at Mars HQ with a playable command hub, starting supplies, mission funding and fuel production. There is no Earth hub. The Mars map opens directly, and the Ares home button returns there. Explore and build locally; open AURA with the ✺ button whenever you want guidance. The intro and mission designer do not open automatically.
@@ -58,6 +62,7 @@ node --check web/map-ui.js
 | `ares/campaign.py`, `ares/campaign_data.py` | Authoritative V2 rules and editable game catalogs |
 | `web/index.html`, `web/campaign.js`, `web/campaign.css` | Campaign interface, mission designer, and local saves |
 | `web/solar-system.js`, `web/solar-system.css` | Collapsible solar navigation, schematic orbits, hub/traffic details and pan/zoom |
+| `web/tutorial.js`, `web/tutorial.css` | Interactive tutorial (spotlight coach marks, 24 steps in 5 chapters) and the ⚙ Settings dialog. Presentation only |
 | `web/map-ui.js`, `web/map-game.css`, `web/planet-map.js` | Map-first in-game HUD, presentation, and draggable/zoomable isometric canvas |
 | `ares/engine.py`, `ares/rules.py` | Preserved classic Mars V1 rules |
 | `web/classic.html`, `web/app.js`, `web/bridge.js` | Preserved V1 browser game and Python bridge |

@@ -6,6 +6,7 @@ import {solarSystemView,mountSolarSystem} from './solar-system.js';
 import {softwareView, programView, softwareConfig, ordersConfig, guideSteps} from './program-ui.js';
 import {applyRuleAction, applyRuleField} from './rule-editor.js';
 import {playLaunch, playArrival} from './flight-view.js';
+import {createTutorial, settingsView} from './tutorial.js';
 
 import {loadCampaign,saveCampaign} from './campaign-save.js';
 const app = document.querySelector('#app');
@@ -30,6 +31,7 @@ let softwareDraft=null, ordersDraft=null, softwareTest=null, guideHidden=false;
 const GUIDE_KEY='ares.first-light.guide-hidden';
 try{guideHidden=localStorage.getItem(GUIDE_KEY)==='1';}catch{/* storage unavailable */}
 let freight={source:'H1',target:'',resource:'materials',amount:20};
+let tutorial=null;
 
 async function api(path, payload) {
   const options = payload === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)};
@@ -62,6 +64,7 @@ async function initialize() {
     if(!state)state=(await api('/api/campaign/new',{seed:'HORIZON-01'})).state;
     resetDrafts();
     openHome();
+    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen)}));
     await save(); render();
   }catch(error){app.innerHTML=`<main class="error-page"><h1>Mission engine unavailable</h1><p>${esc(error.message)}</p><p>Run <code>python3 -m ares.server</code> from the project directory.</p><button onclick="location.reload()">Retry connection</button></main>`;}
 }
@@ -89,7 +92,7 @@ function navButton(id,label,icon) {return `<button class="nav-item ${tab===id?'a
 function topbar() {
   return `<header class="topbar"><button class="brand" data-action="home" aria-label="Return to Mars home map"><span class="brand-mark">✦</span><span>ARES <small>INTERPLANETARY COMMAND</small></span></button>
   <nav class="topnav" aria-label="Game navigation">${navButton('system','PLANET MAP','◈')}${navButton('planner','SHIPYARD','⌁')}${navButton('hubs','OUTPOSTS','▦')}${navButton('logistics','SUPPLY LINES','⇄')}${navButton('research','TECH TREE','✧')}${navButton('software','SOFTWARE','⌬')}${navButton('program','PROGRAMME','◎')}</nav>
-  <div class="header-actions"><span class="save-status"><i></i> LOCAL SAVE</span><button class="tiny-icon" data-action="assistant" aria-label="Open mission assistant">✺</button><button class="tiny-icon" data-action="reset" aria-label="Reset campaign" title="New campaign">↻</button></div></header>`;
+  <div class="header-actions"><span class="save-status"><i></i> LOCAL SAVE</span><button class="tiny-icon" data-action="assistant" aria-label="Open mission assistant">✺</button><button class="tiny-icon" data-action="reset" aria-label="Reset campaign" title="New campaign">↻</button><button class="tiny-icon" data-action="settings-open" aria-label="Settings" title="Settings (tutorial, guide, motion)">⚙</button></div></header>`;
 }
 
 function stats() {
@@ -268,12 +271,13 @@ function modalMarkup(){
   if(modal==='intro')return `<div class="modal-scrim"><section class="aura-modal" role="dialog" aria-modal="true" aria-labelledby="aura-title"><div class="modal-aura">✺</div><div class="eyebrow">A.U.R.A. · INCOMING BRIEFING</div><h2 id="aura-title">Welcome to<br><em>interplanetary command.</em></h2><p>Commander, it is ${turnDate(state.turn)}. Each turn is three months. Earth launch windows follow the planets; Mars departures use game-estimate transfers. Missions can fail, storms can kill a crew, and a review board decides your budget every year.</p><div class="intro-steps"><div><span>01</span><b>WRITE RULES</b><small>Flight software and base orders react when Mission Control is too far away.</small></div><div><span>02</span><b>FLY THE WINDOWS</b><small>Check every flight plan; supported Earth routes use GMAT-derived data.</small></div><div><span>03</span><b>KEEP THEM ALIVE</b><small>Supply, repair and prepare bases before hazards strike.</small></div></div><div class="modal-buttons"><button class="button secondary" data-action="intro-skip">EXPLORE FREELY</button><button class="button primary" data-action="intro-plan">DESIGN FIRST MISSION ↗</button></div><div class="modal-disclaimer">Earth departures to Mars, Venus, Mercury and Europa use NASA GMAT's bundled DE421 ephemeris and Atlas V 401 data, solved as Sun-only two-body transfers. Outer-planet routes and other values are labelled game estimates.</div></section></div>`;
   if(modal==='event'&&state.event)return `<div class="modal-scrim"><section class="aura-modal event-modal" role="dialog" aria-modal="true" aria-labelledby="event-title"><div class="modal-aura danger">!</div><div class="eyebrow">ENVIRONMENTAL EVENT · TURN ${fmtTurn(state.turn)}</div><h2 id="event-title">${esc(state.event.title)}</h2><p>${esc(state.event.description)}</p><div class="event-options">${state.event.choices.map(c=>`<button class="event-option" data-action="event-choice" data-id="${esc(c.id)}"><b>${esc(c.label)} →</b><span>${esc(c.description)}</span></button>`).join('')}</div></section></div>`;
   if(modal==='confirm-launch'&&quote?.ok){const failed=quote.checks.filter(c=>!c.ok);return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><div class="modal-aura danger">!</div><div class="eyebrow">LAUNCH CHECK FAILED</div><h2 id="confirm-title">This mission ${esc((outcomeText[quote.outcome]||'').toLowerCase())}.</h2><ul class="check-list">${failed.map(c=>`<li class="bad"><b>✕ ${esc(c.label)}</b><span>${esc(c.detail)}</span></li>`).join('')}</ul><p>Launching anyway spends the credits${quote.outcome==='scrub'?'; the spacecraft is returned.':quote.outcome==='stranded'?', the spacecraft and its propellant.':' and the spacecraft will not achieve its objective.'}</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">FIX THE PLAN</button><button class="button primary risky" data-action="confirm-launch">LAUNCH ANYWAY</button></div></section></div>`;}
+  if(modal==='settings')return settingsView({tutorial:tutorial.progress(),mapMotion,guideHidden});
   if(modal==='reset')return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="reset-title"><div class="eyebrow">CAMPAIGN RESET</div><h2 id="reset-title">Start a new space programme?</h2><p>Begin at Mars HQ with no Earth hub. Travel to Earth and land before building there. Your current browser save will be replaced.</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">CANCEL</button><button class="button primary" data-action="confirm-reset">START ON MARS</button></div></section></div>`;
   return '';
 }
 
 function guideCard(){
-  if(guideHidden||!catalog.faults)return '';
+  if(guideHidden||!catalog.faults||tutorial?.active())return '';
   const steps=guideSteps(state,{software:catalog.faults.example,orders:catalog.orders.example});
   const index=steps.findIndex(s=>!s.done);
   if(index<0)return '';
@@ -341,6 +345,7 @@ function render(){
     if(techFocus)[...document.querySelectorAll('.rd-screen [data-action]')].find(el=>el.dataset.action===techFocus.action&&el.dataset.id===techFocus.id)?.focus({preventScroll:true});
     refreshResearch();
   }
+  tutorial?.sync();
   if(solarOpen){
     const panel=document.querySelector('.solar-dialog');
     solarController=mountSolarSystem(panel,solarCamera,solarMotion);
@@ -465,6 +470,12 @@ app.addEventListener('click',async event=>{
   if(action==='intro-plan'){modal=state.event?'event':null;tab='planner';render();refreshQuote();return;}
   if(action==='reset'){modal='reset';render();return;}
   if(action==='dismiss-modal'){modal=null;render();return;}
+  if(action==='settings-open'){modal='settings';render();document.querySelector('.settings-modal [data-action="dismiss-modal"]')?.focus();return;}
+  if(action==='tutorial-restart'){modal=null;openHome();tutorial.restart();render();return;}
+  if(action==='tutorial-resume'){modal=null;tutorial.resume();render();return;}
+  if(action==='tutorial-close'){tutorial.close();render();return;}
+  if(action==='settings-guide'){guideHidden=!button.checked;try{localStorage.setItem(GUIDE_KEY,guideHidden?'1':'0');}catch{/* ignore */}render();return;}
+  if(action==='settings-motion'){mapMotion=button.checked;render();return;}
   if(action==='confirm-reset'){
     try {state=(await api('/api/campaign/new',{seed:`HORIZON-${Date.now().toString(36).toUpperCase().slice(-6)}`})).state;resetDrafts();softwareTest=null;openHome();await save();render();}
     catch(error){notify(error.message,true);}return;

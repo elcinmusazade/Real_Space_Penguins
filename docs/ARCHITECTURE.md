@@ -18,6 +18,7 @@ Python 3.9+, standard library only. `python3 -m ares.server` starts a local `Thr
 | `web/campaign-save.js` | IndexedDB autosave, transaction-commit confirmation and migration from the old campaign localStorage key |
 | `web/rule-editor.js`, `web/program-ui.js`, `web/flight-view.js`, `web/program.css` | Rule editor, SOFTWARE and PROGRAMME screens, first-mission guide, launch/arrival animations. View-only |
 | `web/map-ui.js`, `web/map-game.css` | Game-screen HUD and map-first styling; shipyard/research/logistics remain optional in-game panels |
+| `web/tutorial.js`, `web/tutorial.css` | Tutorial coach marks and ⚙ Settings dialog. Reads a context snapshot from campaign.js after each render; never changes game state; "Take me there" clicks existing nav buttons. Progress in localStorage `ares.first-light.tutorial.v1` |
 | `web/solar-system.js`, `web/solar-system.css` | View-only solar-system dialog, schematic SVG planets/orbits, current hub and in-flight traffic details, pan/zoom; campaign.js owns navigation and keyboard/focus handling |
 | `web/planet-map.js` | Isometric Canvas2D rendering, drag pan, zoom, minimap, selection, Python-supplied biomes/elevation, ambient motion, and building art. No game state mutation |
 | `ares/surface.py` | Seeded natural regions, elevation, biome metadata, coastal access and shared nominal production rules |
