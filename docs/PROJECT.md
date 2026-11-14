@@ -12,7 +12,7 @@
 - Instant tile discovery, without manual rover movement.
 - Shared repository documentation usable by humans, ChatGPT/Codex, and Claude in later chats.
 - **V2 requirements:** No action points; free nearby scans and resource/time-gated distant rover surveys; a startup assistant briefing; missions to **Mars, Venus, Mercury, and Europa**; hands-on spacecraft design and mission planning; Earth Mission Control plus **multiple separate surface and orbital hubs** on a world; resource transfer through actual ships/convoys, with time and cost.
-- The team will supply GMAT information for trajectory realism later. Do **not** infer validated flight numbers yet.
+- Earth-departure trajectories use NASA GMAT's bundled data (DE421, Atlas V 401) through an offline Lambert table; everything else in flight planning is a labelled game estimate. A campaign ending is on hold by user request.
 - **Map-first visual redesign:** The game must feel like a strategy game, with a very large explorable map on each planet and at each planetary outpost, not a dashboard.
 
 ## Current campaign (V2) implementation defaults

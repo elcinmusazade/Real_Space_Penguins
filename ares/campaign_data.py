@@ -217,7 +217,8 @@ BUDGET_START, BUDGET_MIN, BUDGET_MAX = 12, 4, 30
 
 def campaign_catalog() -> dict:
     """Catalog plus the V3 flight, fault and programme tables."""
-    from .fault_data import FAULT_COMPUTERS, FAULT_INSTRUMENTS, FAULT_RESPONSES, FAULT_SENSORS, FAULT_SCENARIOS
+    from .fault_data import FAULT_COMPUTERS, FAULT_EXAMPLE_RULES, FAULT_INSTRUMENTS, FAULT_RESPONSES, FAULT_SENSORS, FAULT_SCENARIOS
+    from .flight import PROPELLANT_MAX_KG, table
     base = catalog()
     base.update({
         "physics": PHYSICS, "turnDays": TURN_DAYS, "campaignStart": CAMPAIGN_START, "fuelUnitKg": FUEL_UNIT_KG,
@@ -227,7 +228,10 @@ def campaign_catalog() -> dict:
             "sensors": FAULT_SENSORS, "responses": FAULT_RESPONSES, "instruments": FAULT_INSTRUMENTS,
             "scenarios": {k: {"name": v["name"], "description": v["description"]} for k, v in FAULT_SCENARIOS.items()},
             "arrivalScenario": ARRIVAL_SCENARIO, "limits": {"conditions": 2, "for": 3},
+            "example": {"computer": "standard", "rules": FAULT_EXAMPLE_RULES},
         },
+        "orbitTracks": table()["orbitTracks"], "propellantMaxKg": PROPELLANT_MAX_KG,
+        "lightMinutes": {world: [row["lightMinutes"] for row in rows] for world, rows in table()["destinations"].items()},
         "orders": {"sensors": ORDER_SENSORS, "responses": ORDER_RESPONSES, "slots": ORDER_SLOTS, "autonomySlots": ORDER_SLOTS_AUTONOMY, "example": EXAMPLE_ORDERS},
         "hazards": HAZARDS, "goals": GOALS, "reviewEvery": REVIEW_EVERY,
         "repairCost": REPAIR_COST, "prepareCost": PREPARE_COST,

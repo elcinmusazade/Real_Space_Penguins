@@ -4,7 +4,7 @@ An interactive, turn-based, **Python-powered web strategy game** for a two-perso
 
 ## Run
 
-Requires **Python 3.10+**. No pip installation, API keys, database, or Node.js required to play.
+Requires **Python 3.9+** (tested on 3.9.6). No pip installation, API keys, database, or Node.js required to play.
 
 ```bash
 python3 -m ares.server
@@ -22,13 +22,14 @@ Open **http://127.0.0.1:8000**. Keep the terminal open. Change port with `--port
 3. **Planetary maps:** Mars, Venus, Mercury, and Europa each have a huge **32×32 (1,024-sector) isometric map**. Each established surface hub gets a separate playable map for its landing site. Drag to pan, wheel to zoom, use the minimap to recenter, and choose another planet from the left rail. Before landing, see a cosmetic planetary preview and open the Shipyard to establish a new base. Click unexplored tiles near facilities for **instant free scans**; distant tiles send a time-delayed rover revealing a 3×3 area. Choose a facility in the bottom build bar and click a revealed adjacent tile to construct it. Other hubs can be selected from the site chips.
 4. **Logistics:** Dispatch real cargo between any two established hubs. The source loses resources immediately; the destination gains them **after the vessel/convoy arrives**. The first delivery establishes a reusable route. Surface and orbital hubs are separate inventories; no teleportation.
 5. **Research:** Spend science and credits on a branching technology tree. **Advance Turn** runs facility production, consumption, ship arrivals, expedition results, cargo delivery, research, and hazards.
-6. **Expand:** Multiple surface sites and an orbital hub can coexist per world. Reach Venus, Mercury, and Europa to earn the System Pathfinder milestone.
+6. **Raise the stakes (Campaign rules V3):** each turn is three months starting July 2028. Launch windows follow the real planets; every Earth launch must pass the launch-direction, launch-mass and delta-v checks or it is scrubbed, stranded in Earth orbit, or flies past its target. Write **flight software** (SOFTWARE tab) that must survive each destination's approach faults, and **standing orders** that react to forecast storms at every base. Buildings wear out, crews can die and bases can be lost (and reopened by a new landing). The **PROGRAMME** tab shows goals, hazard forecasts, mission debriefs, and yearly reviews that raise or cut your budget.
+7. **Expand:** Multiple surface sites and an orbital hub can coexist per world. Reach Venus, Mercury, and Europa to earn the System Pathfinder milestone.
 
 **There are no action points in the interplanetary campaign.** Orders are limited by available assets, resources, valid sites, active rovers, and the time required for travel or construction. The classic Mars mode retains its separate two-actions-per-Sol rules.
 
 ## Design boundaries
 
-Spacecraft trajectories, hazards, yields, risk percentages, and transit durations are **illustrative game values**, **not** orbital calculations or NASA measurements. The team intends to provide **GMAT inputs later**. AURA is an authored state-aware offline guide, **not** a live language model. No NASA endorsement or public Python deployment is claimed. Browser saves use local storage; they are not accounts or secure multiplayer records.
+**Earth launches use NASA GMAT data**: launch dates, launch energy (C3), departure direction and arrival speed come from GMAT's bundled DE421 planetary ephemeris, and the Atlas V 401 limits from GMAT's launch-vehicle library, solved offline as Sun-only two-body transfers (`tools/build_campaign_windows.py`). Off-Earth departures, gravity-assist routes, the larger rocket classes, capture orbits, hazards and yields are **labelled game estimates**, not NASA measurements. AURA is an authored state-aware offline guide, **not** a live language model. No NASA endorsement or public Python deployment is claimed. Browser saves use local storage; they are not accounts or secure multiplayer records.
 
 ## Tests
 

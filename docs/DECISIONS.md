@@ -78,3 +78,15 @@ An AURA introduction opens on each load, with context-aware authored help for sh
 
 Make a **32×32 interactive isometric world map the primary screen**, not a tabular overview. Every separate surface hub has its own map; Mars, Venus, Mercury, and Europa use distinct palettes and surface details. Show planets without outposts as cosmetic remote previews with a landing-mission action. Allow drag/zoom, minimap recenter, sector selection, immediate scans close to buildings, resource/time-gated rovers that chart small areas, and direct connected construction. Existing mission planning, logistics, research and AURA remain available as in-game overlays. Preserve Classic V1 unchanged and migrate 5×5 Campaign V2 saves to 32×32 without dropping buildings or in-flight rover targets. Cosmetic rendering is not NASA terrain data.
 
+
+## D-012 — Campaign rules V3: real stakes from real data
+
+**Status:** Implemented. **Date:** 2026-11-14. **Reason:** User asked to raise the stakes, build on the map-first V3 as the base on `main`, and hold off on any campaign ending.
+
+- Promote `ares-first-light-python 3/` to the repository root; keep the `2/` and `3/` folders as snapshots.
+- One turn = 90 days from 2028-07-01, so launch windows from GMAT data map onto turns. Earth launches can be scrubbed (declination), stranded (too heavy for the rocket at that C3) or fly past (too little propellant); the player may launch a failing plan only after confirming.
+- Player-written flight software (WHEN/AND/FOR/THEN rules on a chosen computer) decides arrivals against each destination's scripted fault scenario at a seeded 85-125% intensity, so a lab pass is not a guarantee.
+- Base hazards are forecast two turns ahead. Manual preparation must be ordered at least one turn ahead; on the hazard turn only standing orders react. **Communication delay is shown as real light-time (minutes) rather than a multi-turn order delay**, because a turn-scale delay would misstate physics.
+- Buildings wear; crews can die and bases can be lost, then reopened by a landing at the same site. Uncrewed stations go dark after three unpowered turns and revive with an energy shipment.
+- Yearly reviews move the budget (4-30 credits per turn) and goals pay rewards. **No cancellation, end or loss condition** until the user decides on endings.
+- Only the Atlas V 401 has GMAT performance data; heavy and super-heavy classes are labelled estimates. Real terrain elevation data was not added: it needs a new external download, which needs the user's approval.

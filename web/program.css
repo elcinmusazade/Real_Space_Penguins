@@ -1,0 +1,113 @@
+/* Campaign V3: rule editors, launch checks, programme office, map additions and flight animation. */
+
+/* ---------- rule editor ---------- */
+.software-columns{align-items:start}
+.computer-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+.computer-card{display:flex;flex-direction:column;gap:4px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text)}
+.computer-card small{color:var(--muted);font-size:10px}
+.computer-card.selected{border-color:var(--aqua);box-shadow:inset 0 0 0 1px var(--aqua)}
+.rule-list{display:flex;flex-direction:column;gap:10px}
+.rule-card{border:1px solid var(--line);border-radius:12px;background:#0d1a26;padding:10px 12px}
+.rule-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rule-index{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--panel3);color:var(--aqua);font-size:11px;font-weight:700}
+.rule-priority{font-size:9px;letter-spacing:1.5px;color:var(--subtle);font-weight:700}
+.rule-tools{margin-left:auto;display:flex;gap:4px}
+.rule-mini{border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:7px;min-width:26px;height:26px;font-size:12px}
+.rule-mini:hover:not(:disabled){color:var(--text);border-color:var(--line2)}
+.rule-cond{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:5px 0}
+.rule-word{font-size:10px;font-weight:800;letter-spacing:1.5px;color:var(--amber);min-width:42px}
+.rule-then .rule-word{color:var(--good)}
+.rule-cond select,.rule-cond input{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;max-width:100%}
+.rule-cond input{width:76px}
+.rule-unit{color:var(--muted);font-size:11px}
+.rule-add-cond{border:0;background:none;color:var(--aqua);font-size:11px;padding:2px 0 2px 48px}
+.rule-help{color:var(--muted);font-size:11px;margin:4px 0 0 48px;line-height:1.5}
+.rule-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}
+.rule-slots{font-size:10px;letter-spacing:1.5px;color:var(--muted);font-weight:700}
+.test-results{margin-top:16px;display:flex;flex-direction:column;gap:8px}
+.test-row,.goal-row,.review-row,.forecast-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#0d1a26}
+.test-row>div,.goal-row>div,.review-row>div,.forecast-row>div{flex:1;min-width:0}
+.test-row b,.goal-row b,.review-row b,.forecast-row b{display:block;font-size:13px}
+.test-row small,.goal-row small,.review-row small,.forecast-row small{color:var(--muted);font-size:11px;line-height:1.5}
+.test-mark,.goal-mark{font-size:16px;width:20px;text-align:center}
+.test-row.pass .test-mark,.goal-row.done .goal-mark{color:var(--good)}
+.test-row.fail .test-mark,.goal-row.missed .goal-mark{color:var(--danger)}
+.goal-row+.goal-row,.review-row+.review-row,.forecast-row+.forecast-row{margin-top:8px}
+
+/* ---------- shipyard ---------- */
+.check-list{list-style:none;padding:0;margin:10px 0 14px;display:flex;flex-direction:column;gap:6px}
+.check-list li{border-radius:9px;padding:8px 10px;background:#0d1a26;border:1px solid var(--line);font-size:11px;line-height:1.5}
+.check-list b{display:block;font-size:12px;margin-bottom:2px}
+.check-list span{color:var(--muted)}
+.check-list .ok b{color:var(--good)}.check-list .bad b{color:var(--danger)}.check-list .warn b{color:var(--amber)}
+.check-list .bad{border-color:#f6a1a055}
+.propellant-row{display:flex;gap:10px;align-items:center}
+.propellant-row input[type=range]{flex:1;accent-color:var(--amber)}
+.propellant-row input[type=number]{width:96px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px}
+.window-strip{margin:12px 0}
+.window-bars{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;height:70px;align-items:end;margin-top:8px}
+.window-bar{position:relative;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.window-bar i{display:block;width:100%;height:var(--h);min-height:4px;border-radius:4px 4px 0 0;background:#3a5568}
+.window-bar.reachable i{background:#4f8b8a}
+.window-bar.now i{background:var(--amber)}
+.window-bar small{font-size:9px;color:var(--muted);margin-top:3px}
+.button.risky{background:#c46a5f;border-color:#c46a5f;color:#fff}
+
+/* ---------- programme office ---------- */
+.report-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.report-card{border:1px solid var(--line);border-radius:12px;background:#0d1a26;padding:12px 14px}
+.report-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.report-head b{font-size:13px}
+.report-steps{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.report-steps li{font-size:11px;line-height:1.5;color:var(--muted)}
+.report-steps li small{display:block;font-size:9px;letter-spacing:1.5px;font-weight:700;color:var(--subtle)}
+.report-steps li.good span{color:var(--text)}.report-steps li.bad span{color:var(--danger)}
+.report-card details{margin-top:8px;font-size:11px;color:var(--muted)}
+.report-card summary{cursor:pointer;color:var(--aqua)}
+
+/* ---------- map additions ---------- */
+.map-subtitle.is-alert{color:var(--danger)}
+.building-status{margin:10px 0;display:flex;flex-direction:column;gap:6px}
+.condition-bar{height:6px;border-radius:4px;background:#0d1a26;overflow:hidden;border:1px solid var(--line)}
+.condition-bar span{display:block;height:100%;background:var(--good)}
+.condition-bar.warn span{background:var(--amber)}.condition-bar.bad span{background:var(--danger)}
+.condition-text{color:var(--muted);font-size:10px;letter-spacing:1px}
+.hud-mini-button{border:1px solid var(--line2);background:var(--panel2);color:var(--text);border-radius:8px;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:1px}
+.hud-mini-button:hover{border-color:var(--aqua)}
+.forecast-strip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:8px 0;padding:8px 10px;border-radius:9px;background:#3a1f1f99;border:1px solid #f6a1a055;font-size:10px;letter-spacing:1px}
+.forecast-strip span{color:var(--danger);font-weight:700}.forecast-strip b{color:var(--text)}
+.forecast-strip em{color:var(--muted);font-weight:700}
+.guide-card{position:absolute;left:290px;top:236px;z-index:6;width:min(300px,calc(100vw - 32px));background:#0b1825ee;border:1px solid var(--line2);border-radius:14px;padding:12px 14px;backdrop-filter:blur(12px)}
+.guide-card .hud-kicker{display:flex;justify-content:space-between;align-items:center}
+.guide-close{border:0;background:none;color:var(--muted);font-size:13px}
+.guide-card p{margin:8px 0 0;font-size:12px;line-height:1.45;color:var(--text)}
+.guide-card p button{border:0;background:none;color:var(--aqua);padding:0;text-align:left;font-size:12px;line-height:1.45}
+
+/* ---------- flight animation overlay ---------- */
+.fv-overlay{position:fixed;inset:0;z-index:300;background:radial-gradient(circle at 50% 40%,#132436,#060c14);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+.fv-stage{width:min(520px,90vw);height:min(420px,50vh);display:flex;align-items:center;justify-content:center}
+.fv-stage svg{width:100%;height:100%;overflow:visible}
+.fv-flame{transform-origin:100px 224px;animation:fv-flicker .12s infinite alternate}
+@keyframes fv-flicker{to{transform:scaleY(1.25);opacity:.85}}
+.fv-caption{font-size:12px;letter-spacing:2.5px;color:var(--amber);margin:16px 0 6px;min-height:18px;text-align:center;font-weight:700}
+.fv-meta{font-size:9px;letter-spacing:2px;color:var(--subtle);margin:0;text-align:center}
+.fv-skip{position:absolute;top:18px;right:18px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 12px;color:var(--muted);font-size:11px}
+.fv-card{position:absolute;inset:auto 16px 24px;margin:0 auto;max-width:600px;background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:18px 20px;box-shadow:0 25px 100px #0008;max-height:72vh;overflow:auto}
+.fv-card h2{font-size:21px;margin:6px 0 10px}
+.fv-card p{color:var(--muted);font-size:12px;line-height:1.7}
+.fv-card .report-card{background:var(--panel2)}
+.fv-actions{display:flex;justify-content:flex-end;margin-top:12px}
+@media (prefers-reduced-motion:reduce){.fv-flame{animation:none}}
+
+@media (max-width:1270px){.guide-card{left:238px;top:226px}.topline-extra{display:none}}
+
+@media (max-width:760px){
+  .computer-picker{grid-template-columns:1fr}
+  .rule-add-cond,.rule-help{padding-left:0;margin-left:0}
+  .report-grid{grid-template-columns:1fr}
+  .guide-card{left:12px;right:12px;width:auto;top:268px;bottom:auto;padding:9px 12px}
+  .window-bars{height:54px}
+}
+
+/* Seven nav destinations: drop labels to icons before they scroll out of view. */
+@media (max-width:1180px){.map-mode .nav-item{font-size:0;padding:0 10px;gap:0}.map-mode .nav-item span{font-size:17px}}

@@ -12,9 +12,20 @@ Verified primary-source pages on **2026-11-13**. The application currently uses 
 
 ## Currently integrated datasets
 
-**None.** The game's terrain, resources, crops, timing, and scenarios are authored or seed-generated game content. Do not claim live NASA data, realistic crop growth, or engineering certification.
+**NASA GMAT R2026a bundled data (Campaign rules V3, 2026-11-14).** Used offline only; the game ships the derived table, not GMAT.
 
-**Campaign V2 extension (2026-11-14):** The Venus, Mercury, and Europa locations and broad environment descriptions are educational flavor; their hazard chances, transfer turn counts, fuel coefficients, ship masses, and construction yields in `ares/campaign_data.py` are **authored game assumptions**. Europa is a Jovian moon. The player has not yet supplied GMAT trajectory outputs, so no mission route in V2 is claimed to be a computed or verified trajectory. When GMAT files arrive, document inputs, epoch, coordinate frame, spacecraft parameters, solver configuration, units, and numerical results before integrating them.
+| Input | GMAT path | Used for |
+| --- | --- | --- |
+| JPL DE421 planetary ephemeris (SPK, Type 2 Chebyshev) | `application/data/planetary_ephem/spk/de421.bsp` | Heliocentric Earth, Mercury, Venus, Mars and Jupiter positions/velocities; Earth-target light-time |
+| EMTG launch-vehicle library, `Atlas_V_401` row | `application/data/emtg/NLSII_August2018_Augmented.emtg_launchvehicleopt` | Delivered mass vs C3 polynomial, C3 range 0-60, declination limit ±28.5° |
+
+**Processing** (`tools/build_campaign_windows.py`, standard library): for each 90-day turn from 2028-07-01 (80 turns) and each destination, Earth departures every 6 days are paired with a time-of-flight grid (Mercury 70-260 d, Venus 80-330 d, Mars 120-420 d, Jupiter 500-1300 d) and solved as prograde single-revolution Lambert problems around the Sun (universal variables). Kept per turn: lowest total delta-v (departure from a 200 km Earth orbit + capture), lowest within ±28.5° departure declination, and the fastest within 1.5 km/s of the lowest. Units: km, km/s, km²/s², days, UTC dates (TDB approximated as UTC + 69.184 s). Sanity checks: the 2028 Mars window comes out at C3 ≈ 9.2 km²/s²; Mars windows recur about every 26 months; Mars light-time ranges 3-22 minutes; the Atlas curve gives ~2,069 kg at C3 16.4 (MRO launched 2,180 kg). `tests/test_flight.py` recomputes one entry when the GMAT clone is present.
+
+**Limits:** Sun-only two-body patched conics (no planetary perturbations, no launch-day targeting, no flybys). The game's gravity-assist route, heavy and super-heavy rockets, capture orbits, landing delta-v, cryogenic boil-off, ion-engine factors, off-Earth departures, hazards, wear and yields are **game estimates**, labelled in the UI.
+
+Terrain, resources, crops and scenarios remain authored or seed-generated game content. Do not claim live NASA data, realistic crop growth, or engineering certification.
+
+**Campaign V2 extension (2026-11-14):** The Venus, Mercury, and Europa locations and broad environment descriptions are educational flavor; their hazard chances, transfer turn counts, fuel coefficients, ship masses, and construction yields in `ares/campaign_data.py` are **authored game assumptions**. Europa is a Jovian moon. (Superseded for Earth departures by the GMAT-derived table above.) When GMAT files arrive, document inputs, epoch, coordinate frame, spacecraft parameters, solver configuration, units, and numerical results before integrating them.
 
 **Map-first V3 presentation (2026-11-14):** All 32×32 surface maps and decorative crater/ridge colors in `web/planet-map.js` are stylized, seeded **fictional game terrain**. They are not derived from NASA planetary elevation rasters, scientific maps, or planetary imagery. Hidden terrain decorations are cosmetic and independent of authoritative Python resource types until exploration reveals them.
 

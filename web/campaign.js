@@ -1,6 +1,9 @@
 /** Browser interface for the Python-authoritative interplanetary campaign. */
 import {mountPlanetMap} from './planet-map.js';
 import {mapScreen} from './map-ui.js';
+import {softwareView, programView, softwareConfig, ordersConfig, guideSteps} from './program-ui.js';
+import {applyRuleAction, applyRuleField} from './rule-editor.js';
+import {playLaunch, playArrival} from './flight-view.js';
 
 const SAVE_KEY = 'ares.first-light.campaign.v2';
 const app = document.querySelector('#app');
@@ -14,7 +17,10 @@ let catalog=null, state=null, quote=null, pending=false, quoteId=0;
 let tab='system', selectedWorld='mars', selectedHub='H2', selectedBuilding=null, selectedTile=528;
 let mapController=null;
 let modal='intro', assistantTopic='welcome';
-let draft={source:'H1',destination:'venus',site:'Ishtar Terra',objective:'surface',hull:'lander',engine:'chemical',trajectory:'balanced',payload:['rover','lab','shield']};
+let draft={source:'H1',destination:'mars',site:'Jezero Rim',objective:'surface',hull:'lander',engine:'chemical',trajectory:'balanced',payload:['rover','lab'],vehicle:'atlas_v_401',propellantKg:600};
+let softwareDraft=null, ordersDraft=null, softwareTest=null, guideHidden=false;
+const GUIDE_KEY='ares.first-light.guide-hidden';
+try{guideHidden=localStorage.getItem(GUIDE_KEY)==='1';}catch{/* storage unavailable */}
 let freight={source:'H1',target:'H2',resource:'materials',amount:20};
 
 async function api(path, payload) {
@@ -48,22 +54,26 @@ async function initialize() {
     if(!state)state=(await api('/api/campaign/new',{seed:'HORIZON-01'})).state;
     if(state.event)modal='intro'; // AURA always opens first; pending events open when the briefing closes.
     if(!state.hubs.some(h=>h.id===selectedHub))selectedHub=state.hubs.find(h=>h.kind==='surface')?.id || state.hubs[0].id;
+    resetDrafts();
     save(); render(); refreshQuote();
   }catch(error){app.innerHTML=`<main class="error-page"><h1>Mission engine unavailable</h1><p>${esc(error.message)}</p><p>Run <code>python3 -m ares.server</code> from the project directory.</p><button onclick="location.reload()">Retry connection</button></main>`;}
 }
 
 function hub(id) { return state.hubs.find(h=>h.id===id); }
+function resetDrafts(){softwareDraft=JSON.parse(JSON.stringify(state.software));ordersDraft=JSON.parse(JSON.stringify(state.orders));}
+const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function turnDate(turn){const d=new Date(Date.UTC(...catalog.campaignStart.split('-').map((v,i)=>i===1?Number(v)-1:Number(v))));d.setUTCDate(d.getUTCDate()+catalog.turnDays*(turn-1));return d.toISOString().slice(0,10);}
 function world(id) { return catalog.worlds[id]; }
 function activeFlights(){return state.missions.filter(x=>x.status==='in_flight');}
 function activeCargo(){return state.shipments.filter(x=>x.status==='in_flight');}
 function hubCount(id){return state.hubs.filter(h=>h.world===id).length;}
 function until(turn){return `${Math.max(0,turn-state.turn)} TURN${Math.max(0,turn-state.turn)===1?'':'S'}`;}
 
-function navButton(id,label,icon) {return `<button class="nav-item ${tab===id?'active':''}" data-action="nav" data-id="${id}" aria-pressed="${tab===id}"><span>${icon}</span>${label}</button>`;}
+function navButton(id,label,icon) {return `<button class="nav-item ${tab===id?'active':''}" data-action="nav" data-id="${id}" aria-pressed="${tab===id}" title="${label}" aria-label="${label}"><span>${icon}</span>${label}</button>`;}
 
 function topbar() {
   return `<header class="topbar"><button class="brand" data-action="nav" data-id="system" aria-label="Ares interplanetary command home"><span class="brand-mark">✦</span><span>ARES <small>INTERPLANETARY COMMAND</small></span></button>
-  <nav class="topnav" aria-label="Game navigation">${navButton('system','PLANET MAP','◈')}${navButton('planner','SHIPYARD','⌁')}${navButton('hubs','OUTPOSTS','▦')}${navButton('logistics','SUPPLY LINES','⇄')}${navButton('research','TECH TREE','✧')}</nav>
+  <nav class="topnav" aria-label="Game navigation">${navButton('system','PLANET MAP','◈')}${navButton('planner','SHIPYARD','⌁')}${navButton('hubs','OUTPOSTS','▦')}${navButton('logistics','SUPPLY LINES','⇄')}${navButton('research','TECH TREE','✧')}${navButton('software','SOFTWARE','⌬')}${navButton('program','PROGRAMME','◎')}</nav>
   <div class="header-actions"><span class="save-status"><i></i> LOCAL SAVE</span><button class="tiny-icon" data-action="assistant" aria-label="Open mission assistant">✺</button><button class="tiny-icon" data-action="reset" aria-label="Reset campaign" title="New campaign">↻</button></div></header>`;
 }
 
@@ -122,10 +132,24 @@ function shipBlueprint() {
   return `<div class="blueprint"><div class="blueprint-title">SPACECRAFT BLUEPRINT <small>CONFIGURATION / ${esc(hull.toUpperCase())}</small></div><svg viewBox="0 0 420 170" role="img" aria-label="Stylized spacecraft design preview"><defs><linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a3bccb"/><stop offset="1" stop-color="#49667e"/></linearGradient></defs><path d="M210 20 235 67 233 125 210 145 187 125 185 67Z" fill="url(#metal)" stroke="#b8e2e9" stroke-width="1.4"/><path d="M210 18 220 52 200 52Z" fill="#d6e6ec"/><path d="M185 75  ${185-wing} 118 ${185-wing} 145 188 119Z" fill="#688497" stroke="#a9d4df"/><path d="M235 75 ${235+wing} 118 ${235+wing} 145 232 119Z" fill="#688497" stroke="#a9d4df"/><path d="M197 144 203 159 210 166 217 159 223 144Z" fill="#f3a86b" opacity=".85"/><ellipse cx="210" cy="82" rx="11" ry="20" fill="#1c394a" stroke="#8fd1da"/><path d="M75 74H160M260 74H350M210 12V1M210 167V158" fill="none" stroke="#527688" stroke-dasharray="4 5"/><text x="15" y="67" fill="#78a3b2" font-size="10" font-family="monospace">${esc(catalog.hulls[hull].name.toUpperCase())}</text><text x="275" y="67" fill="#78a3b2" font-size="10" font-family="monospace">${esc(catalog.engines[draft.engine].name.toUpperCase())}</text></svg><div class="blueprint-modules">${payload.length?payload.map(p=>`<span>◇ ${esc(catalog.payloads[p].name)}</span>`).join(''):'<span>No payload selected</span>'}</div></div>`;
 }
 
+const outcomeText={go:'ALL CHECKS PASS',scrub:'WILL BE SCRUBBED',stranded:'WILL BE STRANDED',flyby:'WILL FLY PAST',drift:'WILL DRIFT PAST'};
+function windowStrip(){
+  if(!quote.windows?.length)return '';
+  const max=Math.max(...quote.windows.map(w=>Math.min(w.totalDvKms,20)));
+  return `<div class="window-strip" aria-label="Lowest total delta-v for the next 12 turns"><div class="eyebrow">NEXT 12 TURNS · LOWER BAR = CHEAPER TRANSFER</div><div class="window-bars">${quote.windows.map(w=>`<span class="window-bar ${w.turn===state.turn?'now':''} ${w.safeDvKms!==null&&w.safeDvKms<=w.totalDvKms+0.6?'reachable':''}" style="--h:${Math.round(Math.min(w.totalDvKms,20)/max*100)}%" title="Turn ${w.turn} (${w.date}): ${w.totalDvKms} km/s total, C3 ${w.c3}"><i></i><small>${w.turn}</small></span>`).join('')}</div></div>`;
+}
 function quotePanel() {
   if(!quote)return `<div class="quote-panel"><div class="eyebrow">FLIGHT CALCULATION</div><p>Calculating launch parameters with Python...</p></div>`;
   if(!quote.ok)return `<div class="quote-panel invalid"><div class="eyebrow">PLAN NEEDS WORK</div><p>${esc(quote.error)}</p></div>`;
-  return `<div class="quote-panel"><div class="eyebrow">MISSION TRADE-OFFS · ESTIMATED</div><div class="quote-grid"><div><small>TRANSFER TIME</small><strong>${quote.turns}<em> TURNS</em></strong></div><div><small>FUEL REQUIRED</small><strong>${quote.fuel}<em> UNITS</em></strong></div><div><small>MISSION CREDITS</small><strong>${quote.credits}<em> CR</em></strong></div><div><small>SHIP MATERIALS</small><strong>${quote.materials}<em> MAT</em></strong></div><div><small>PAYLOAD MASS</small><strong>${quote.mass}<em> / ${quote.capacity} t</em></strong></div><div><small>ARRIVAL RISK</small><strong>${quote.riskPercent}<em>%</em></strong></div></div>${!quote.affordable?'<div class="quote-warning">Insufficient resources at the departure hub. Refill or ship resources before launching.</div>':''}<p class="simulation-note">${esc(quote.notice)}</p></div>`;
+  const t=quote.transfer,n=quote.numbers,sw=quote.software;
+  return `<div class="quote-panel"><div class="eyebrow">LAUNCH CHECKS · ${esc(outcomeText[quote.outcome])}</div>
+    <ul class="check-list">${quote.checks.map(c=>`<li class="${c.ok?'ok':'bad'}"><b>${c.ok?'✓':'✕'} ${esc(c.label)}</b><span>${esc(c.detail)}</span></li>`).join('')}
+    <li class="${sw.passedNominal?(sw.passedHarsh?'ok':'warn'):'bad'}"><b>${sw.passedNominal?(sw.passedHarsh?'✓':'!'):'✕'} Flight software vs ${esc(sw.name.toLowerCase())}</b><span>${sw.passedNominal?(sw.passedHarsh?'Passes the lab test with margin for harsher conditions.':'Passes the lab test, but fails if conditions run 25% harsher.'):sw.lost?'Lab test: spacecraft LOST. Fix the rules in SOFTWARE before launching.':`Lab test: arrives damaged (${sw.science}/${sw.target} science).`}</span></li></ul>
+    <div class="quote-grid"><div><small>LAUNCH</small><strong>${esc(t.launch)}</strong></div><div><small>ARRIVAL · TURN ${quote.arrivalTurn}</small><strong>${esc(t.arrival)}</strong></div><div><small>LAUNCH ENERGY C3</small><strong>${t.c3??'—'}<em> km²/s²</em></strong></div><div><small>ARRIVAL SPEED</small><strong>${t.arrivalVinf}<em> km/s</em></strong></div><div><small>DELTA-V NEED / HAVE</small><strong>${n.dvNeedKms} / ${n.dvHaveKms}<em> km/s</em></strong></div><div><small>LAUNCH MASS</small><strong>${num(n.launchKg)}<em> kg${n.vehicleCapacityKg!==null?' / '+num(n.vehicleCapacityKg):''}</em></strong></div><div><small>FUEL · CREDITS</small><strong>${quote.fuel}<em> U</em> · ${quote.credits}<em> CR</em></strong></div><div><small>SHIP MATERIALS</small><strong>${quote.materials}<em> MAT</em></strong></div></div>
+    ${t.label?`<p class="field-description">${esc(t.label)}.</p>`:''}
+    ${windowStrip()}
+    ${quote.rescue?`<div class="callout">This landing will reopen the lost base at ${esc(quote.site)}.</div>`:''}
+    ${!quote.affordable?'<div class="quote-warning">Insufficient resources at the departure hub. Refill or ship resources before launching.</div>':''}<p class="simulation-note">${esc(quote.notice)}</p></div>`;
 }
 
 function plannerView() {
@@ -133,14 +157,15 @@ function plannerView() {
   const destinations=Object.keys(catalog.worlds).filter(x=>x!=='earth');
   const w=world(draft.destination);
   const sites=draft.objective==='surface'?w.sites:[draft.objective==='orbital'?'Orbital Station':'Remote Survey'];
-  return `${ribbon('MISSION PLANNING','SHIPYARD / TRAJECTORY DESIGN')}<div class="page-heading"><div><h1>Design the impossible.</h1><p>Your spacecraft, route and payload directly affect cost, arrival time and risk.</p></div>${pill('PYTHON FLIGHT RULES')}</div>
+  return `${ribbon('MISSION PLANNING','SHIPYARD / TRAJECTORY DESIGN')}<div class="page-heading"><div><h1>Design the impossible.</h1><p>Turn ${state.turn} · ${turnDate(state.turn)}. Earth launches are checked against NASA GMAT data: planet positions, launch energy and real rocket limits.</p></div>${pill('GMAT LAUNCH WINDOWS')}</div>
   <div class="planner-layout"><section class="surface-card planner-form"><div class="subheading"><h2>01 · Mission brief</h2><span>ROUTE</span></div>
   <div class="form-grid">${selectField('source',Object.keys(sourceNames),draft.source,sourceNames)}${selectField('destination',destinations,draft.destination,Object.fromEntries(destinations.map(id=>[id,world(id).name])))}${selectField('objective',['surface','orbital','survey'],draft.objective,{surface:'Establish surface hub',orbital:'Deploy orbital hub',survey:'Robotic science survey'})}${selectField('site',sites,draft.site)}</div>
-  <div class="subheading"><h2>02 · Configure spacecraft</h2><span>ENGINEERING</span></div><div class="form-grid">${selectField('hull',Object.keys(catalog.hulls),draft.hull,Object.fromEntries(Object.entries(catalog.hulls).map(([id,v])=>[id,v.name])))}${selectField('engine',Object.keys(catalog.engines),draft.engine,Object.fromEntries(Object.entries(catalog.engines).map(([id,v])=>[id,v.name])))}${selectField('trajectory',Object.keys(catalog.trajectories),draft.trajectory,Object.fromEntries(Object.entries(catalog.trajectories).map(([id,v])=>[id,v.name])))}</div>
-  <p class="field-description">${esc(catalog.trajectories[draft.trajectory].description)} Mass and fuel needs depend on every chosen component.</p>
-  <div class="subheading"><h2>03 · Select payload</h2><span>MULTIPLE MODULES</span></div><div class="payload-grid">${Object.entries(catalog.payloads).map(([id,p])=>`<button class="payload-card ${draft.payload.includes(id)?'selected':''}" aria-pressed="${draft.payload.includes(id)}" data-action="payload" data-id="${id}"><span class="payload-check">${draft.payload.includes(id)?'✓':'+'}</span><strong>${esc(p.name)}</strong><small>${p.mass} t · ${p.materials} MAT</small><span>${esc(p.description)}</span></button>`).join('')}</div>
-  <div class="planner-actions"><button class="button secondary" data-action="quote">RECALCULATE</button><button class="button primary" data-action="launch" ${!quote?.ok||!quote?.affordable||pending?'disabled':''}>AUTHORIZE LAUNCH ↗</button></div></section>
-  <aside class="planner-preview">${shipBlueprint()}${quotePanel()}<div class="mission-advice"><span>✺ AURA'S NOTE</span><p>Faster transfers cost more fuel. Extra payload improves scientific return but increases ship mass and construction costs.</p></div></aside></div>`;
+  <div class="subheading"><h2>02 · Configure spacecraft</h2><span>ENGINEERING</span></div><div class="form-grid">${selectField('hull',Object.keys(catalog.hulls),draft.hull,Object.fromEntries(Object.entries(catalog.hulls).map(([id,v])=>[id,`${v.name} · ${num(v.dryKg)} kg dry`])))}${selectField('engine',Object.keys(catalog.engines),draft.engine,Object.fromEntries(Object.entries(catalog.engines).map(([id,v])=>[id,`${v.name} · Isp ${v.isp} s`])))}${selectField('trajectory',Object.keys(catalog.trajectories),draft.trajectory,Object.fromEntries(Object.entries(catalog.trajectories).map(([id,v])=>[id,v.name])))}${hub(draft.source)?.world==='earth'?selectField('vehicle',Object.keys(catalog.vehicles),draft.vehicle,Object.fromEntries(Object.entries(catalog.vehicles).map(([id,v])=>[id,`${v.name}${v.source==='estimate'?' (estimate)':''} · ${v.credits} CR`]))):''}</div>
+  <p class="field-description">${esc(catalog.trajectories[draft.trajectory].description)} ${esc(catalog.engines[draft.engine].description)}${hub(draft.source)?.world==='earth'?' '+esc(catalog.vehicles[draft.vehicle].note):''}</p>
+  <label class="field propellant-field"><span>PROPELLANT LOAD · ${num(draft.propellantKg)} KG · ${Math.ceil(draft.propellantKg/catalog.fuelUnitKg)} FUEL UNITS</span><div class="propellant-row"><input type="range" data-field="propellantKg" min="0" max="${catalog.propellantMaxKg}" step="50" value="${draft.propellantKg}" aria-label="Propellant load in kilograms"><input type="number" data-field="propellantKg" min="0" max="${catalog.propellantMaxKg}" step="10" value="${draft.propellantKg}" aria-label="Propellant kilograms"></div></label>
+  <div class="subheading"><h2>03 · Select payload</h2><span>MULTIPLE MODULES</span></div><div class="payload-grid">${Object.entries(catalog.payloads).map(([id,p])=>`<button class="payload-card ${draft.payload.includes(id)?'selected':''}" aria-pressed="${draft.payload.includes(id)}" data-action="payload" data-id="${id}"><span class="payload-check">${draft.payload.includes(id)?'✓':'+'}</span><strong>${esc(p.name)}</strong><small>${num(p.mass)} kg · ${p.materials} MAT</small><span>${esc(p.description)}</span></button>`).join('')}</div>
+  <div class="planner-actions"><button class="button secondary" data-action="quote">RECALCULATE</button><button class="button primary ${quote?.ok&&quote.outcome!=='go'?'risky':''}" data-action="launch" ${!quote?.ok||!quote?.affordable||pending?'disabled':''}>${quote?.ok&&quote.outcome!=='go'?'LAUNCH ANYWAY…':'AUTHORIZE LAUNCH ↗'}</button></div></section>
+  <aside class="planner-preview">${shipBlueprint()}${quotePanel()}<div class="mission-advice"><span>✺ AURA'S NOTE</span><p>Planets line up for cheap transfers only every so often: watch the 12-turn strip. More propellant means a bigger braking burn but a heavier rocket load. Every check must be green, and your flight software must survive the approach.</p></div></aside></div>`;
 }
 
 function stockCards(h) {return `<div class="stock-grid">${Object.entries(h.stocks).map(([key,value])=>`<div class="stock-item"><small>${esc(resourceName[key]||key)}</small><strong>${num(value)}</strong></div>`).join('')}</div>`;}
@@ -202,10 +227,20 @@ function advisor(){return `<aside class="advisor-panel"><div class="advisor-head
 
 function modalMarkup(){
   if(!modal)return '';
-  if(modal==='intro')return `<div class="modal-scrim"><section class="aura-modal" role="dialog" aria-modal="true" aria-labelledby="aura-title"><div class="modal-aura">✺</div><div class="eyebrow">A.U.R.A. · INCOMING BRIEFING</div><h2 id="aura-title">Welcome to<br><em>interplanetary command.</em></h2><p>Commander, you're directing a space programme across Mars, Venus, Mercury and Europa. Every spacecraft you build and every shipment you send changes what your missions can accomplish.</p><div class="intro-steps"><div><span>01</span><b>DESIGN</b><small>Choose hull, engine, trajectory and payload.</small></div><div><span>02</span><b>EXPLORE</b><small>Deploy hubs and dispatch rovers into the unknown.</small></div><div><span>03</span><b>CONNECT</b><small>Link stations with real cargo transfers.</small></div></div><div class="modal-buttons"><button class="button secondary" data-action="intro-skip">EXPLORE FREELY</button><button class="button primary" data-action="intro-plan">DESIGN FIRST MISSION ↗</button></div><div class="modal-disclaimer">Physics coefficients are simplified game estimates. Give us your GMAT inputs to refine trajectory calculations.</div></section></div>`;
+  if(modal==='intro')return `<div class="modal-scrim"><section class="aura-modal" role="dialog" aria-modal="true" aria-labelledby="aura-title"><div class="modal-aura">✺</div><div class="eyebrow">A.U.R.A. · INCOMING BRIEFING</div><h2 id="aura-title">Welcome to<br><em>interplanetary command.</em></h2><p>Commander, it is ${turnDate(state.turn)}. Each turn is three months. Launch windows open and close with the real planets, missions can fail, storms can kill a crew, and a review board decides your budget every year.</p><div class="intro-steps"><div><span>01</span><b>WRITE RULES</b><small>Flight software and base orders react when Earth is too far away.</small></div><div><span>02</span><b>FLY THE WINDOWS</b><small>Pass every launch check with real rocket and orbit data.</small></div><div><span>03</span><b>KEEP THEM ALIVE</b><small>Supply, repair and prepare bases before hazards strike.</small></div></div><div class="modal-buttons"><button class="button secondary" data-action="intro-skip">EXPLORE FREELY</button><button class="button primary" data-action="intro-plan">DESIGN FIRST MISSION ↗</button></div><div class="modal-disclaimer">Earth-departure trajectories use NASA GMAT's bundled DE421 ephemeris and Atlas V 401 data, solved as Sun-only two-body transfers. Other values are labelled game estimates.</div></section></div>`;
   if(modal==='event'&&state.event)return `<div class="modal-scrim"><section class="aura-modal event-modal" role="dialog" aria-modal="true" aria-labelledby="event-title"><div class="modal-aura danger">!</div><div class="eyebrow">ENVIRONMENTAL EVENT · TURN ${fmtTurn(state.turn)}</div><h2 id="event-title">${esc(state.event.title)}</h2><p>${esc(state.event.description)}</p><div class="event-options">${state.event.choices.map(c=>`<button class="event-option" data-action="event-choice" data-id="${esc(c.id)}"><b>${esc(c.label)} →</b><span>${esc(c.description)}</span></button>`).join('')}</div></section></div>`;
+  if(modal==='confirm-launch'&&quote?.ok){const failed=quote.checks.filter(c=>!c.ok);return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><div class="modal-aura danger">!</div><div class="eyebrow">LAUNCH CHECK FAILED</div><h2 id="confirm-title">This mission ${esc((outcomeText[quote.outcome]||'').toLowerCase())}.</h2><ul class="check-list">${failed.map(c=>`<li class="bad"><b>✕ ${esc(c.label)}</b><span>${esc(c.detail)}</span></li>`).join('')}</ul><p>Launching anyway spends the credits${quote.outcome==='scrub'?'; the spacecraft is returned.':quote.outcome==='stranded'?', the spacecraft and its propellant.':' and the spacecraft will not achieve its objective.'}</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">FIX THE PLAN</button><button class="button primary risky" data-action="confirm-launch">LAUNCH ANYWAY</button></div></section></div>`;}
   if(modal==='reset')return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="reset-title"><div class="eyebrow">CAMPAIGN RESET</div><h2 id="reset-title">Start a new space programme?</h2><p>Your current browser save will be replaced. Consider keeping this run open if you want to continue it.</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">CANCEL</button><button class="button primary" data-action="confirm-reset">RESET CAMPAIGN</button></div></section></div>`;
   return '';
+}
+
+function guideCard(){
+  if(guideHidden||!catalog.faults)return '';
+  const steps=guideSteps(state,{software:catalog.faults.example,orders:catalog.orders.example});
+  const index=steps.findIndex(s=>!s.done);
+  if(index<0)return '';
+  const step=steps[index];
+  return `<aside class="guide-card" aria-label="First mission guide"><div class="hud-kicker">FIRST MISSION GUIDE · STEP ${index+1} / ${steps.length} <button class="guide-close" data-action="guide-hide" aria-label="Hide guide">✕</button></div><p>${step.action?`<button data-action="nav" data-id="${step.action}">${esc(step.text)} →</button>`:esc(step.text)}</p></aside>`;
 }
 
 function activeSurface(){const candidates=state.hubs.filter(h=>h.world===selectedWorld&&h.kind==='surface');return candidates.find(h=>h.id===selectedHub)||candidates[0]||null;}
@@ -240,8 +275,9 @@ function mountGameMap(){
 
 function render(){
   if(!state||!catalog)return;
-  const secondary=tab==='planner'?plannerView():tab==='logistics'?logisticsView():tab==='research'?researchView():'';
-  app.innerHTML=`<div class="campaign-app map-mode">${topbar()}<main class="map-main">${mapScreen({catalog,state,selectedWorld,selectedHub,selectedBuilding,selectedTile,pending})}${secondary?`<div class="game-screen-dimmer"></div><section class="game-screen-panel"><button class="map-back" data-action="nav" data-id="system">← BACK TO MAP</button>${secondary}</section>`:''}</main></div>${modalMarkup()}`;
+  const secondary=tab==='planner'?plannerView():tab==='logistics'?logisticsView():tab==='research'?researchView():tab==='software'?softwareView({catalog,state,softwareDraft,ordersDraft,softwareTest,dirtySoftware:!same(softwareDraft,state.software),dirtyOrders:!same(ordersDraft,state.orders)}):tab==='program'?programView({catalog,state,date:turnDate(state.turn)}):'';
+  const lightWorld=selectedWorld==='earth'?null:selectedWorld;
+  app.innerHTML=`<div class="campaign-app map-mode">${topbar()}<main class="map-main">${mapScreen({catalog,state,selectedWorld,selectedHub,selectedBuilding,selectedTile,pending,date:turnDate(state.turn),lightMinutes:lightWorld?(catalog.lightMinutes?.[lightWorld]?.[(state.turn-1)%catalog.lightMinutes[lightWorld].length]??'—'):0,guide:guideCard()})}${secondary?`<div class="game-screen-dimmer"></div><section class="game-screen-panel"><button class="map-back" data-action="nav" data-id="system">← BACK TO MAP</button>${secondary}</section>`:''}</main></div>${modalMarkup()}`;
   document.querySelector('.campaign-app').inert=Boolean(modal);
   mountGameMap();
 }
@@ -259,8 +295,11 @@ async function perform(action,args={}){
   try{
     const result=await api('/api/campaign/action',{state,action,args});
     if(!result.ok){notify(result.message||'Mission command was rejected.',true);return;}
-    const oldCount=state.hubs.length;
+    const oldCount=state.hubs.length,oldTurn=state.turn,oldMissions=state.missions.length;
     state=result.state;save();notify(result.message||'Mission control acknowledged.');
+    if(action==='setSoftware'||action==='setOrders')resetDrafts();
+    if(action==='launch'&&state.missions.length>oldMissions){const m=state.missions.at(-1);render();await playLaunch({mission:{...m,outcome:m.status==='failed'?m.outcome:'launched'},catalog,tracks:catalog.orbitTracks});}
+    if(action==='advance'){for(const m of state.missions.filter(m=>m.arrivesAt===state.turn&&m.departed<oldTurn+1&&(m.status==='complete'||m.status==='failed')&&m.outcome&&!['scrubbed','stranded'].includes(m.outcome))){render();await playArrival({mission:m,catalog,tracks:catalog.orbitTracks});}}
     if(state.hubs.length>oldCount&&tab==='planner'){selectedHub=state.hubs.at(-1).id;selectedWorld=state.hubs.at(-1).world;}
     if(state.event)modal='event';
     render();
@@ -274,7 +313,7 @@ app.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]');
   if(!button||button.disabled)return;
   const action=button.dataset.action,id=button.dataset.id;
-  if(action==='nav'){tab=id;selectedBuilding=null;render();if(tab==='planner')refreshQuote();return;}
+  if(action==='nav'){tab=id;selectedBuilding=null;if(tab==='software'&&same(softwareDraft,state.software)&&same(ordersDraft,state.orders))resetDrafts();render();if(tab==='planner')refreshQuote();return;}
   if(action==='map-world'){
     selectedWorld=id;const established=state.hubs.find(h=>h.world===id&&h.kind==='surface')||state.hubs.find(h=>h.world===id);
     if(established)selectedHub=established.id;
@@ -298,7 +337,16 @@ app.addEventListener('click',async event=>{
   if(action==='choose-destination'){chooseDestination(id);return;}
   if(action==='payload'){draft.payload=draft.payload.includes(id)?draft.payload.filter(item=>item!==id):[...draft.payload,id];quote=null;render();refreshQuote();return;}
   if(action==='quote'){refreshQuote();return;}
-  if(action==='launch'){await perform('launch',{design:draft});return;}
+  if(action==='launch'){if(quote?.ok&&quote.outcome!=='go'){modal='confirm-launch';render();return;}await perform('launch',{design:draft});return;}
+  if(action==='confirm-launch'){modal=null;await perform('launch',{design:draft,confirm:true});return;}
+  if(action==='guide-hide'){guideHidden=true;try{localStorage.setItem(GUIDE_KEY,'1');}catch{/* ignore */}render();return;}
+  if(action==='prepare'){await perform('prepare',{forecast:id});return;}
+  if(action==='repair'){const surface=activeSurface();if(surface)await perform('repair',{hub:surface.id,tile:Number(id)});return;}
+  if(action==='pick-computer'){softwareDraft={...softwareDraft,computer:id};softwareTest=null;render();return;}
+  if(action.startsWith('rule-')){const kind=button.dataset.kind;if(kind==='software'){const config={...softwareConfig(catalog),slots:catalog.computers[softwareDraft.computer].slots};softwareDraft={...softwareDraft,rules:applyRuleAction(softwareDraft.rules,action,button.dataset,config)};softwareTest=null;}else{ordersDraft=applyRuleAction(ordersDraft,action,button.dataset,ordersConfig(catalog,state));}render();return;}
+  if(action==='software-test'){try{softwareTest=await api('/api/campaign/faults/test',{design:softwareDraft});}catch(error){softwareTest={ok:false,error:error.message};}render();return;}
+  if(action==='software-save'){await perform('setSoftware',softwareDraft);refreshQuote();return;}
+  if(action==='orders-save'){await perform('setOrders',{rules:ordersDraft});return;}
   if(action==='build-mode'){selectedBuilding=selectedBuilding===id?null:id;render();return;}
   if(action==='cancel-build'){selectedBuilding=null;render();return;}
   if(action==='tile'){
@@ -320,14 +368,20 @@ app.addEventListener('click',async event=>{
   if(action==='reset'){modal='reset';render();return;}
   if(action==='dismiss-modal'){modal=null;render();return;}
   if(action==='confirm-reset'){
-    try {state=(await api('/api/campaign/new',{seed:`HORIZON-${Date.now().toString(36).toUpperCase().slice(-6)}`})).state;selectedHub='H2';selectedWorld='mars';selectedTile=528;selectedBuilding=null;tab='system';modal='intro';quote=null;save();render();refreshQuote();}
+    try {state=(await api('/api/campaign/new',{seed:`HORIZON-${Date.now().toString(36).toUpperCase().slice(-6)}`})).state;resetDrafts();softwareTest=null;selectedHub='H2';selectedWorld='mars';selectedTile=528;selectedBuilding=null;tab='system';modal='intro';quote=null;save();render();refreshQuote();}
     catch(error){notify(error.message,true);}return;
   }
 });
 
 app.addEventListener('change',async event=>{
   const control=event.target,field=control.dataset.field;
+  if(control.dataset.ruleField){
+    if(control.dataset.kind==='software'){softwareDraft={...softwareDraft,rules:applyRuleField(softwareDraft.rules,control.dataset,control.value,softwareConfig(catalog))};softwareTest=null;}
+    else ordersDraft=applyRuleField(ordersDraft,control.dataset,control.value,ordersConfig(catalog,state));
+    render();return;
+  }
   if(!field)return;
+  if(field==='propellantKg'){draft.propellantKg=Math.max(0,Math.min(catalog.propellantMaxKg,Math.round(Number(control.value)||0)));quote=null;render();refreshQuote();return;}
   if(field==='hub'){selectedHub=control.value;selectedWorld=hub(selectedHub).world;selectedTile=528;selectedBuilding=null;render();return;}
   if(field==='crew'){await perform('assignCrew',{hub:selectedHub,index:Number(control.dataset.index),assignment:control.value});return;}
   if(field.startsWith('freight_')){freight[field.slice(8)]=field==='freight_amount'?Number(control.value):control.value;render();return;}
@@ -335,6 +389,16 @@ app.addEventListener('change',async event=>{
   if(field==='destination'){selectedWorld=draft.destination;draft.site=world(draft.destination).sites[0];}
   if(field==='objective'){draft.site=field==='objective'&&draft.objective==='surface'?world(draft.destination).sites[0]:draft.objective==='orbital'?'Orbital Station':'Remote Survey';}
   quote=null;render();refreshQuote();
+});
+
+let propTimer=null;
+app.addEventListener('input',event=>{
+  const control=event.target;
+  if(control.dataset.field!=='propellantKg'||control.type!=='range')return;
+  draft.propellantKg=Number(control.value);
+  const label=control.closest('.propellant-field')?.querySelector('span');
+  if(label)label.textContent=`PROPELLANT LOAD · ${num(draft.propellantKg)} KG · ${Math.ceil(draft.propellantKg/catalog.fuelUnitKg)} FUEL UNITS`;
+  clearTimeout(propTimer);propTimer=setTimeout(()=>{quote=null;refreshQuote();},180);
 });
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&modal&&modal!=='event'){modal=state?.event?'event':null;render();}});
