@@ -51,3 +51,27 @@ export const study = state => action('study', state);
 export const researchTech = (state, tech) => action('researchTech', state, tech);
 export const chooseEvent = (state, choice) => action('chooseEvent', state, choice);
 export const advanceSol = state => action('advanceSol', state);
+
+// Orbiter launch prelude (ares/launch.py decides every outcome).
+export async function launchCatalog() {
+  const response = await fetch('/api/launch/catalog');
+  const data = await response.json();
+  if (!data.ok) throw new Error('Launch data unavailable.');
+  return data.catalog;
+}
+
+export async function assessLaunch({window, propellant, design}) {
+  try {
+    const response = await fetch('/api/launch/assess', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ window, propellant, design }),
+    });
+    return await response.json();
+  } catch {
+    return { ok: false, error: 'Cannot reach the Python mission server.' };
+  }
+}
+
+export async function launchMission({window, propellant, design, seed, loadout}) {
+  return post('/api/launch', { window, propellant, design, seed, loadout });
+}

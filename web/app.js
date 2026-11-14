@@ -1,6 +1,7 @@
 import * as Engine from './bridge.js';
 import { icon, terrainArt, buildingArt, planetArt } from './art.js';
 import { SCIENCE_NOTES, SOURCES, FIELD_GUIDE, SIMULATION_NOTICE } from './science.js';
+import { renderLaunchPanel, readout, playLaunch, readFaultDesign } from './launch-view.js';
 
 const app = document.querySelector('#app');
 const SAVE_KEY = 'ares-first-light.mission.v1';
@@ -36,6 +37,12 @@ let storageAvailable = true;
 let audioContext;
 let previousFocus = null;
 let launchTimer;
+let launchData = null;
+let launchWindow = null;
+let propellant = 900;
+let assessment = null;
+let assessTimer;
+let assessSeq = 0;
 
 function makeSeed() { return `ARES-${Math.random().toString(36).slice(2, 7).toUpperCase()}`; }
 function readStorage(key) { try { return localStorage.getItem(key); } catch { storageAvailable = false; return null; } }
@@ -132,12 +139,13 @@ function renderSetup() {
       </section>
       <section class="setup-config" aria-labelledby="cargo-heading">
         <div class="setup-title"><div><div class="eyebrow">PRE-FLIGHT CHECKLIST</div><h2 id="cargo-heading" style="margin-top:7px">Pack for the unknown.</h2></div><span class="tag orange">01 / MISSION PREP</span></div>
+        ${renderLaunchPanel({catalog: launchData, windowId: launchWindow, propellant, assessment, fault: readFaultDesign()})}
         <p class="setup-intro">Your habitat, solar array, oxygen recycler, and scout rover are included. Choose the extra cargo that shapes your strategy.</p>
         <div class="cargo-grid">${Object.entries(Engine.CARGO).map(([id,c]) => `<button class="cargo-card ${cargo.includes(id) ? 'selected' : ''}" data-action="cargo" data-id="${id}" aria-pressed="${cargo.includes(id)}" aria-label="${esc(c.name)}. ${c.cost} credits, ${c.mass} tonnes. ${esc(c.benefits.join(', '))}">
           ${icon(cargoIcons[id],21)}<span class="cargo-check">${icon('check',11)}</span><div class="cargo-name">${esc(c.name)}</div><div class="cargo-description">${esc(c.benefits.join(' · '))}</div><div class="cargo-bottom"><span>${c.cost} CREDITS</span><span>${c.mass} t</span></div></button>`).join('')}</div>
         <div class="loadout-meters">${loadoutMeter('Launch budget',check.cost,70,'cr')}${loadoutMeter('Payload mass',check.mass,8,'t')}</div>
         ${!check.ok ? `<p class="red" style="font-size:10px;margin:0 0 13px">${esc(check.errors.join(' '))}</p>` : ''}
-        <button class="btn btn-primary btn-full launch-btn" data-action="launch" ${!check.ok ? 'disabled' : ''}>${icon('rocket',17)} Launch mission ${icon('arrow',17)}</button>
+        <button class="btn btn-primary btn-full launch-btn" data-action="launch" ${!check.ok || !readFaultDesign().design || !launchData ? 'disabled' : ''}>${icon('rocket',17)} Launch mission ${icon('arrow',17)}</button>
         <p class="setup-note">Turn-based strategy. No timer. Your progress saves on this device.</p>
         <div class="setup-small-actions"><button class="text-btn" data-action="balanced">Use balanced loadout</button><button class="text-btn" data-action="manual">Read field manual</button>${game ? `<button class="text-btn" data-action="continue">Resume Sol ${game.sol}</button>` : ''}</div>
       </section>
@@ -324,8 +332,15 @@ function closeModal() {
 async function launch() {
   const check=Engine.validateLoadout(cargo);
   if(!check.ok){toast(check.errors.join(' '),true);return;}
-  try { game=await Engine.createGame({seed,loadout:cargo}); }
+  const fault=readFaultDesign();
+  if(!fault.design){toast('Design your orbiter\'s fault protection in the fault lab first.',true);return;}
+  let result;
+  try { result=await Engine.launchMission({window:launchWindow,propellant,design:fault.design,seed,loadout:cargo}); }
   catch(error) { toast(error.message || 'The Python mission server is unavailable.',true); return; }
+  playTone('turn');
+  const passed=await playLaunch(result,launchData);
+  if(!passed){render();document.querySelector('#lp-prop')?.focus();return;}
+  game=result.state;
   phase='game';selectedTile=14;selectedBuild=null;buildTab='build';modal=null;tutorial=true;saveGame();render();
   const overlay=document.createElement('div');overlay.className='launch-overlay';overlay.innerHTML=`<div class="launch-symbol">${icon('rocket',48)}</div><h2>GO FOR LANDING</h2><p>ARES-01 · ARCADIA SECTOR</p><div class="launch-progress"><div></div></div>`;document.body.append(overlay);
   playTone('turn');clearTimeout(launchTimer);launchTimer=setTimeout(()=>{overlay.remove();toast('Touchdown confirmed. Welcome to Mars, commander.');},window.matchMedia('(prefers-reduced-motion: reduce)').matches?150:1300);
@@ -359,6 +374,7 @@ async function onAction(event) {
   if(action==='cargo'){cargo=cargo.includes(id)?cargo.filter(v=>v!==id):[...cargo,id];render();document.querySelector(`[data-action="cargo"][data-id="${id}"]`)?.focus();return;}
   if(action==='balanced'){cargo=[...Engine.DEFAULT_LOADOUT];render();return;}
   if(action==='launch'){launch();return;}
+  if(action==='launch-window'){launchWindow=id;assessment=null;render();requestAssess(0);document.querySelector(`[data-action="launch-window"][data-id="${id}"]`)?.focus();return;}
   if(action==='new'){openModal({type:'new'});return;}
   if(action==='prepare'){phase='setup';seed=makeSeed();cargo=[...Engine.DEFAULT_LOADOUT];modal=null;render();window.scrollTo({top:0,behavior:'instant'});return;}
   if(action==='export'){exportGame();return;}
@@ -423,5 +439,31 @@ document.addEventListener('keydown',event=>{
 });
 
 try { sounds=!!JSON.parse(readStorage(PREF_KEY)||'{}').sounds; } catch { /* Ignore an invalid preference, not the mission. */ }
+function requestAssess(delay=150) {
+  clearTimeout(assessTimer);
+  assessTimer=setTimeout(async()=>{
+    const fault=readFaultDesign();
+    const seq=++assessSeq;
+    const result=fault.design?await Engine.assessLaunch({window:launchWindow,propellant,design:fault.design}):{ok:false,error:'Design fault protection in the fault lab to see launch numbers.'};
+    if(seq!==assessSeq)return;
+    assessment=result;
+    const node=document.querySelector('#lp-readout');
+    if(node)node.innerHTML=readout(assessment);
+  },delay);
+}
+
+app.addEventListener('input',event=>{
+  if(event.target.id!=='lp-prop')return;
+  propellant=Number(event.target.value);
+  const label=document.querySelector('#lp-prop-value');
+  if(label)label.textContent=`${propellant.toLocaleString('en-US')} kg`;
+  requestAssess();
+});
+
 loadGame();render();
+Engine.launchCatalog().then(catalog=>{
+  launchData=catalog;launchWindow=catalog.windows[0].id;propellant=catalog.orbiter.propellantDefaultKg;
+  if(phase==='setup')render();
+  requestAssess(0);
+}).catch(()=>toast('GMAT launch data could not be loaded from the Python server.',true));
 window.addEventListener('pageshow',()=>{if(game&&phase==='game')saveGame();});

@@ -5,6 +5,7 @@
  */
 
 const STORE = 'ares-fault-lab-v1';
+const RESULT_STORE = 'ares-fault-lab-result-v1';
 const root = document.getElementById('lab');
 let catalog = null;
 let design = null;
@@ -28,10 +29,18 @@ function save() {
   try { localStorage.setItem(STORE, JSON.stringify(design)); } catch { /* ignore */ }
 }
 
+function saveResult(value) {
+  try {
+    if (value) localStorage.setItem(RESULT_STORE, JSON.stringify(value));
+    else localStorage.removeItem(RESULT_STORE);
+  } catch { /* ignore */ }
+}
+
 function changed() {
   if (report) stale = true;
   error = '';
   save();
+  saveResult(null);
   render();
 }
 
@@ -193,6 +202,7 @@ function results() {
   } else {
     body = `<div class="summary"><span class="summary-score">${report.passed}/${report.results.length}</span><p>scenarios passed.<br>${report.passed === report.results.length ? 'Your fault protection is flight-ready.' : 'Open a failed scenario’s log to see which rule fired, or didn’t, and why.'}</p></div>
       ${stale ? '<p class="stale">Rules changed since this run. Run the tests again.</p>' : ''}
+      ${stale ? '' : '<a class="btn btn-primary" href="/" style="width:100%;margin-bottom:14px;text-decoration:none">Continue to orbiter launch →</a>'}
       ${report.results.map(scenarioCard).join('')}`;
   }
   return `<section class="lab-panel" aria-labelledby="test-h" aria-live="polite">
@@ -240,6 +250,7 @@ async function runTests() {
     const data = await response.json();
     if (!data.ok) throw new Error(data.error || 'Mission control rejected the design.');
     report = data; stale = false;
+    saveResult({passed: data.passed, total: data.results.length});
   } catch (err) {
     error = err instanceof TypeError ? 'Cannot reach the Python mission server. Is it running?' : err.message;
   } finally {
@@ -294,6 +305,7 @@ root.addEventListener('change', event => {
     if (!data.ok) throw new Error('bad catalog');
     catalog = data.catalog;
     design = load();
+    save();
     render();
   } catch {
     root.innerHTML = '<p class="lab-muted" style="padding:40px 0">Cannot reach the Python mission server. Start it with <code>python3 -m ares.server</code> and reload.</p>';

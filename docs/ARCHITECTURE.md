@@ -8,6 +8,9 @@ Python 3.10+, standard library only. `python3 -m ares.server` starts a local `Th
 | --- | --- |
 | `ares/rules.py` | Definitions for buildings, cargo, crops, research, events and terrain |
 | `ares/engine.py` | **Authoritative deterministic Python simulation**: new games, legal actions, turn resolution, forecasts, saves |
+| `ares/launch.py`, `ares/data/mars_launch_windows.json` | Orbiter launch prelude: pass/fail from GMAT-derived launch data (table built offline) |
+| `tools/build_mars_launch_table.py`, `tools/gmat_spk.py` | Offline builder: reads GMAT's DE421 ephemeris and Atlas V curve, solves Lambert transfers. Needs the local `GMAT/` clone; not used at runtime |
+| `web/launch-view.js`, `web/launch.css` | Launch panel and outcome animation (display only) |
 | `ares/faults.py` | Fault Protection Lab: rule validation and deterministic orbiter fault simulation (constants in `rules.py`) |
 | `web/faults.html`, `web/faults.js`, `web/faults.css` | Rule editor and test-report page; edits rules only and asks Python for results |
 | `ares/server.py` | Serves `web/` files; accepts structured JSON game commands |
@@ -25,6 +28,9 @@ Python 3.10+, standard library only. `python3 -m ares.server` starts a local `Th
 - `POST /api/new` with `{ "seed": "ARES-01", "loadout": [...] }` — returns `{ "ok": true, "state": {...} }`.
 - `POST /api/action` with `{ "state": {...}, "action": "explore", "args": [12] }` — validates the prior state and executes one Python rule, returning `{ "ok": true, "state": {...}, "message": "..." }` or a failure.
 - `POST /api/validate` with `{ "state": {...} }` — checks a saved game.
+- `GET /api/launch/catalog` — GMAT-derived launch dates, trajectory points, Atlas V data, orbiter assumptions.
+- `POST /api/launch/assess` with `{ "window", "propellant", "design" }` — Python launch checks without starting a game.
+- `POST /api/launch` with the same fields plus `seed` and `loadout` — decides the outcome and includes a new game `state` only on success.
 - `GET /api/faults/catalog` — sensors, responses, computers, and scenarios for the Fault Protection Lab editor.
 - `POST /api/faults/test` with `{ "design": { "computer": "standard", "rules": [...] } }` — validates the rules (`ares/faults.py`) and returns per-scenario results plus a no-rules baseline. A bad design returns 400 with a readable error.
 

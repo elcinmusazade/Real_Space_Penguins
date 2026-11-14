@@ -46,6 +46,12 @@ Solar generation precedes reserved crew needs. Water extraction, oxygen recyclin
 
 The tile inspector, forecast, and end-of-Sol resolution share the same allocation plan. This avoids contradictory UI predictions and gives players a clear survival-versus-science trade-off. The order is an explicit educational game rule, not a claim about real mission control policy.
 
+## D-009 — Launch outcome from GMAT data, precomputed offline
+
+**Status:** Implemented. **Date:** 2026-11-14. **Reason:** The user asked for GMAT to decide launch pass/fail. GMAT is not built or installed locally, and the user chose to use GMAT's bundled data instead of installing or building it.
+
+Read GMAT's DE421 ephemeris and Atlas V performance curve offline and commit the derived table. Runtime stays standard-library Python with no GMAT dependency, and teammates without the GMAT clone can still play and run tests (the recompute test skips). If GMAT is installed later, its scripts can replace the Lambert builder and produce the same JSON shape.
+
 ## D-008 — Python is authoritative in a separately delivered edition
 
 **Status:** Implemented. **Date:** 2026-11-14. **Reason:** User requested a full Python-based web game after selecting the web format.

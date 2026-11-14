@@ -16,11 +16,12 @@ Open **http://127.0.0.1:8000** in a browser. To choose a different port, run `py
 
 ## Play
 
-1. Choose your launch cargo and start a mission.
-2. Click an unexplored frontier tile to reveal its terrain instantly.
-3. Select a building, then click a valid revealed adjacent tile to construct it. New buildings activate the following Sol.
-4. Spend up to **two actions per Sol** on scanning, building, studying, upgrading, or other available choices.
-5. Use **End Sol** to run production and crew consumption. Resolve mission events and survive through Sol 10 while gathering **70 science**.
+1. Open **Fault lab** and design your relay orbiter's onboard fault-protection rules; run the fault tests.
+2. Back in mission control, pick a 2028 launch date and propellant load, and choose your crew cargo. **Launch** shows whether the orbiter reached Mars orbit (decided in Python from NASA GMAT data); only a successful orbiter lets the crew land.
+3. Click an unexplored frontier tile to reveal its terrain instantly.
+4. Select a building, then click a valid revealed adjacent tile to construct it. New buildings activate the following Sol.
+5. Spend up to **two actions per Sol** on scanning, building, studying, upgrading, or other available choices.
+6. Use **End Sol** to run production and crew consumption. Resolve mission events and survive through Sol 10 while gathering **70 science**.
 
 The 6×6 Mars sector, energy/oxygen/water/food/materials, weather, research, and events are governed by a repeatable seeded simulation. Game values are **educational simplifications**, not NASA operational calculations. The terrain is illustrative, not a downloaded NASA landing-site map.
 

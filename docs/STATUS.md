@@ -20,6 +20,14 @@
 - **33 tests pass** (11 new). Browser-checked locally on desktop and at a 375 px mobile width: editing, reordering, slot limit, server rejection, test run, and the turn log. No console errors.
 - Not yet connected to the colony game or a design phase; values are illustrative game numbers.
 
+## Orbiter launch prelude (same branch)
+
+- Mission control now runs **fault lab → orbiter launch → colony**. The setup screen shows the fault-protection status, 7 GMAT-derived 2028 launch dates, and a propellant slider, with live Python numbers for launch mass, capture burn and declination.
+- **Launch** asks Python (`POST /api/launch`) to decide one of four outcomes: success, scrubbed (declination outside the Atlas V limit), stranded (too heavy for the date's C3), or flyby (not enough propellant to capture). The browser animates that outcome: rocket ascent, then an Earth-orbit, heliocentric cruise along the real transfer arc, or Mars capture. A card then explains every check. Only success creates the colony game.
+- **GMAT data use:** `tools/build_mars_launch_table.py` reads the JPL DE421 ephemeris and the Atlas V 401 performance curve that ship with the local GMAT clone. It solves Lambert transfers offline into `ares/data/mars_launch_windows.json`. GMAT itself is **not run** (not built or installed on this Mac); the user chose this data-only route.
+- Only 2 of 7 dates can succeed (Nov 12 and Nov 18, 2028, with about 1,160-1,350 kg of propellant). The lowest-C3 dates fail on declination.
+- **42 tests pass** (9 new). Browser-checked locally: stranded, flyby and success paths through to the colony map, with no failing requests.
+
 ## Honest limitations
 
 - This Python edition has **not been published**. The previous JavaScript Site is untouched; its static host cannot execute Python.

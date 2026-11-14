@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 from . import __version__
 from . import engine
 from . import faults
+from . import launch
 
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -31,6 +32,8 @@ STATIC_TYPES = {
     "faults.html": "text/html; charset=utf-8",
     "faults.js": "text/javascript; charset=utf-8",
     "faults.css": "text/css; charset=utf-8",
+    "launch-view.js": "text/javascript; charset=utf-8",
+    "launch.css": "text/css; charset=utf-8",
 }
 MAX_BODY = 300_000
 
@@ -55,6 +58,9 @@ class GameHandler(BaseHTTPRequestHandler):
         if path == "/api/health":
             self._json({"ok": True, "engine": "python", "version": __version__})
             return
+        if path == "/api/launch/catalog":
+            self._json({"ok": True, "catalog": launch.catalog()})
+            return
         if path == "/api/faults/catalog":
             self._json({"ok": True, "catalog": faults.catalog()})
             return
@@ -66,7 +72,7 @@ class GameHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ("/api/new", "/api/action", "/api/validate", "/api/faults/test"):
+        if path not in ("/api/new", "/api/action", "/api/validate", "/api/faults/test", "/api/launch/assess", "/api/launch"):
             self._json({"ok": False, "error": "Unknown endpoint."}, HTTPStatus.NOT_FOUND)
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -87,6 +93,23 @@ class GameHandler(BaseHTTPRequestHandler):
             return
         if not isinstance(payload, dict):
             self._json({"ok": False, "error": "Expected a JSON object."}, HTTPStatus.BAD_REQUEST)
+            return
+        if path in ("/api/launch/assess", "/api/launch"):
+            result = launch.assess(payload.get("window"), payload.get("propellant"), payload.get("design"))
+            if not result["ok"]:
+                self._json(result, HTTPStatus.BAD_REQUEST)
+                return
+            if path == "/api/launch" and result["passed"]:
+                seed, loadout = payload.get("seed", "ARES-01"), payload.get("loadout", list(engine.DEFAULT_LOADOUT))
+                if not isinstance(seed, str):
+                    self._json({"ok": False, "error": "Invalid mission seed."}, HTTPStatus.BAD_REQUEST)
+                    return
+                try:
+                    result["state"] = engine.create_game(seed, loadout)
+                except (ValueError, TypeError) as exc:
+                    self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    return
+            self._json(result)
             return
         if path == "/api/faults/test":
             result = faults.run_tests(payload.get("design"))

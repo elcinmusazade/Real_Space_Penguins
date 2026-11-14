@@ -164,3 +164,21 @@ FAULT_EXAMPLE_RULES = [
     {"when": [{"sensor": "battery", "op": "<", "value": 40}], "for": 1, "then": "instrument_off", "target": "radar"},
     {"when": [{"sensor": "storage", "op": ">", "value": 60}, {"sensor": "contact", "op": "is", "value": True}], "for": 1, "then": "downlink_boost"},
 ]
+
+# ---------------------------------------------------------------------------
+# Orbiter launch (prelude to the colony). Launch-vehicle capacity, launch
+# dates, C3, declination and arrival v-infinity come from NASA GMAT data via
+# ares/data/mars_launch_windows.json. The orbiter's mass and engine are
+# simplified game assumptions.
+# ---------------------------------------------------------------------------
+
+LAUNCH_ORBITER = {
+    "dryMassKg": 1100,          # bus + camera, radar, spectrometer (game assumption)
+    "ispSeconds": 320,          # bipropellant main engine (typical class, game assumption)
+    "propellantMinKg": 300, "propellantMaxKg": 1600, "propellantStepKg": 10,
+    "propellantDefaultKg": 900,
+    "orbitPeriapsisKm": 400, "orbitApoapsisKm": 400,  # circular science/relay orbit
+}
+MARS_GM = 42828.37      # km^3/s^2
+MARS_RADIUS_KM = 3389.5
+G0 = 9.80665

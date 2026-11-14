@@ -93,5 +93,21 @@ class ServerTests(unittest.TestCase):
         self.assertEqual((status, mime), (200, "text/html"))
 
 
+    def test_launch_creates_game_only_on_success(self):
+        status, _, raw = self.request("/api/launch/catalog")
+        self.assertEqual(status, 200)
+        design = json.loads(self.request("/api/faults/catalog")[2])["catalog"]["example"]
+        status, _, raw = self.request("/api/launch", {"window": "2028-11-18", "propellant": 500, "design": design, "seed": "L1"})
+        result = json.loads(raw)
+        self.assertEqual((status, result["outcome"]), (200, "flyby"))
+        self.assertNotIn("state", result)
+        status, _, raw = self.request("/api/launch", {"window": "2028-11-18", "propellant": 1250, "design": design, "seed": "L1"})
+        result = json.loads(raw)
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["state"]["seed"], "L1")
+        status, _, _ = self.request("/api/launch/assess", {"window": "nope", "propellant": 1000, "design": design})
+        self.assertEqual(status, 400)
+
+
 if __name__ == "__main__":
     unittest.main()
