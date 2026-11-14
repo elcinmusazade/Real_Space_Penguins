@@ -307,7 +307,14 @@ async function perform(action,args={}){
   }catch(error){notify(error.message,true);}finally{pending=false;render();}
 }
 
-function chooseDestination(id){selectedWorld=id;draft.destination=id;draft.site=world(id).sites[0];draft.objective='surface';tab='planner';quote=null;render();refreshQuote();}
+/** First landing site with no base and no lander on the way; a lost base's site comes next (rescue). */
+function freeSite(id){
+  const sites=world(id).sites;
+  const taken=site=>state.hubs.some(h=>h.world===id&&h.kind==='surface'&&h.site===site)||state.missions.some(m=>m.status==='in_flight'&&m.destination===id&&m.objective==='surface'&&m.site===site);
+  return sites.find(site=>!taken(site))||sites.find(site=>state.hubs.some(h=>h.world===id&&h.site===site&&h.status==='lost'))||sites[0];
+}
+
+function chooseDestination(id){selectedWorld=id;draft.destination=id;draft.site=freeSite(id);draft.objective='surface';tab='planner';quote=null;render();refreshQuote();}
 
 app.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]');
@@ -321,7 +328,7 @@ app.addEventListener('click',async event=>{
     selectedBuilding=null;tab='system';render();return;
   }
   if(action==='map-hub'){selectedHub=id;selectedWorld=hub(id).world;selectedTile=528;selectedBuilding=null;tab='system';render();return;}
-  if(action==='map-plan'){draft.destination=selectedWorld==='earth'?'mars':selectedWorld;draft.site=world(draft.destination).sites[0];draft.objective='surface';tab='planner';render();refreshQuote();return;}
+  if(action==='map-plan'){draft.destination=selectedWorld==='earth'?'mars':selectedWorld;draft.site=freeSite(draft.destination);draft.objective='surface';tab='planner';render();refreshQuote();return;}
   if(action==='map-zoom-in'){mapController?.zoom(1.22);return;}
   if(action==='map-zoom-out'){mapController?.zoom(1/1.22);return;}
   if(action==='map-center'){mapController?.centerOn();return;}
@@ -386,8 +393,8 @@ app.addEventListener('change',async event=>{
   if(field==='crew'){await perform('assignCrew',{hub:selectedHub,index:Number(control.dataset.index),assignment:control.value});return;}
   if(field.startsWith('freight_')){freight[field.slice(8)]=field==='freight_amount'?Number(control.value):control.value;render();return;}
   draft[field]=control.value;
-  if(field==='destination'){selectedWorld=draft.destination;draft.site=world(draft.destination).sites[0];}
-  if(field==='objective'){draft.site=field==='objective'&&draft.objective==='surface'?world(draft.destination).sites[0]:draft.objective==='orbital'?'Orbital Station':'Remote Survey';}
+  if(field==='destination'){selectedWorld=draft.destination;draft.site=freeSite(draft.destination);}
+  if(field==='objective'){draft.site=field==='objective'&&draft.objective==='surface'?freeSite(draft.destination):draft.objective==='orbital'?'Orbital Station':'Remote Survey';}
   quote=null;render();refreshQuote();
 });
 
