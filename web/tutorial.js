@@ -33,7 +33,8 @@ export const STEPS = [
     body: 'Open the navigator to see every planet orbit the Sun, check your hubs and traffic, and jump to any world’s map or plan a mission there.',
     hint: 'Worlds without a base are previews. A landing mission must arrive before you can build there.'},
 
-  {chapter: 'Explore & build', title: 'Scan the land around HQ', action: true, target: ['[data-action="survey-sector"]', '#planet-map'], goto: 'system',
+  {chapter: 'Explore & build', title: 'Scan the land around HQ', action: true, target: ['[data-action="survey-sector"][data-free="true"]', '#planet-map'], goto: 'system', assist: 'scan',
+    status: ctx => !ctx.selection ? '' : ctx.selection.revealed ? 'That sector is already charted. Pick one just outside the charted patch.' : ctx.selection.free === false ? 'That sector is too far for a free scan (the button says Start Regional Survey). Pick one closer to a building, or press SHOW ME.' : ctx.selection.free ? 'Good pick. Press SCAN SECTOR in the inspector.' : '',
     body: 'The land right around HQ is already charted. Click a sector just beyond it, up to two sectors from any building, then press <b>SCAN SECTOR</b> in the inspector. Nearby scans are free and instant.',
     hint: 'Far sectors need a Regional Survey: it costs energy and takes 1–3 turns, but maps a 3×3 area.',
     base: ctx => revealed(ctx.home), done: (ctx, base) => revealed(ctx.home) > base},
@@ -44,7 +45,8 @@ export const STEPS = [
     body: 'Choose a facility from the construction bay. A <b>Solar Array</b> is a safe first pick: everything else runs on energy.',
     hint: 'Click the same button again, or CANCEL, to stop placing.',
     done: ctx => Boolean(ctx.selectedBuilding)},
-  {chapter: 'Explore & build', title: 'Build it', action: true, target: ['[data-action="construct-sector"]', '#planet-map'], goto: 'system',
+  {chapter: 'Explore & build', title: 'Build it', action: true, target: ['[data-action="construct-sector"]:not(:disabled)', '#planet-map'], goto: 'system', assist: 'build',
+    status: ctx => !ctx.selectedBuilding ? 'Choose a facility in the construction bay first.' : ctx.selection?.reason ? `Can’t build on this sector: ${ctx.selection.reason} Try another, or press SHOW ME.` : ctx.selection?.canBuild ? 'Good spot. Press BUILD HERE in the inspector.' : '',
     body: 'Select a scanned, empty sector that touches an existing building, check the cost and output in the inspector, then press <b>BUILD HERE</b>.',
     hint: 'If the button is disabled, the reason is shown below it: usually an unscanned sector, no connection, or not enough materials.',
     base: ctx => built(ctx.home), done: (ctx, base) => built(ctx.home) > base},
@@ -139,7 +141,7 @@ export function settingsView({tutorial, mapMotion, guideHidden}) {
  * Create the tutorial controller. `getContext()` returns
  * {state, tab, selectedBuilding, home, softwareTested, blocked}.
  */
-export function createTutorial(getContext) {
+export function createTutorial(getContext, actions = {}) {
   let progress = loadProgress();
   let base = null, baseStep = -1, scrolledStep = -1, frame = 0, keyboard = false;
   const root = document.createElement('div');
@@ -181,11 +183,13 @@ export function createTutorial(getContext) {
       <h2 id="tut-title">${esc(current.title)}</h2>
       <p class="tut-body">${current.body}</p>
       ${current.hint ? `<p class="tut-hint"><span aria-hidden="true">💡</span> ${esc(current.hint)}</p>` : ''}
+      ${current.status && current.status(getContext()) ? `<p class="tut-status">${esc(current.status(getContext()))}</p>` : ''}
       ${missing ? `<p class="tut-wait">This part of the screen is not open yet.</p>` : waiting ? `<p class="tut-wait"><span class="tut-pulse" aria-hidden="true"></span>Your turn: do this to continue.</p>` : ''}
       <div class="tut-progress" aria-hidden="true"><span style="width:${Math.round((n + 1) / total * 100)}%"></span></div>
       <div class="tut-foot"><span class="tut-count">${n + 1} / ${total}</span>
         <div class="tut-buttons">${n > 0 ? '<button class="button secondary" data-tut="back">BACK</button>' : ''}
         ${missing && current.goto ? `<button class="button primary" data-tut="goto">TAKE ME THERE</button>` : ''}
+        ${!missing && current.assist && actions.suggest ? `<button class="button primary" data-tut="assist">SHOW ME</button>` : ''}
         ${current.action ? `<button class="button secondary" data-tut="next">SKIP STEP</button>` : `<button class="button primary" data-tut="next">${n === total - 1 ? 'FINISH' : 'NEXT'}</button>`}</div></div>`;
   }
 
@@ -273,6 +277,7 @@ export function createTutorial(getContext) {
     else if (what === 'dismiss' || what === 'close') { progress = {...progress, status: what === 'close' ? 'paused' : 'paused'}; save(); sync(); }
     else if (what === 'next') go(progress.step + 1);
     else if (what === 'back') go(Math.max(0, progress.step - 1));
+    else if (what === 'assist') { if (!actions.suggest?.(step().assist)) { const note = root.querySelector('.tut-status'); if (note) note.textContent = 'No suitable sector is visible right now. Try scanning or zooming out.'; } }
     else if (what === 'goto') document.querySelector(`[data-action="nav"][data-id="${step().goto}"]`)?.click();
   });
   window.addEventListener('resize', reposition);

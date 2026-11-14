@@ -64,7 +64,7 @@ async function initialize() {
     if(!state)state=(await api('/api/campaign/new',{seed:'HORIZON-01'})).state;
     resetDrafts();
     openHome();
-    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen)}));
+    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection()}),{suggest:suggestTile});
     await save(); render();
   }catch(error){app.innerHTML=`<main class="error-page"><h1>Mission engine unavailable</h1><p>${esc(error.message)}</p><p>Run <code>python3 -m ares.server</code> from the project directory.</p><button onclick="location.reload()">Retry connection</button></main>`;}
 }
@@ -283,6 +283,31 @@ function guideCard(){
   if(index<0)return '';
   const step=steps[index];
   return `<aside class="guide-card" aria-label="First mission guide"><div class="hud-kicker">FIRST MISSION GUIDE · STEP ${index+1} / ${steps.length} <button class="guide-close" data-action="guide-hide" aria-label="Hide guide">✕</button></div><p>${step.action?`<button data-action="nav" data-id="${step.action}">${esc(step.text)} →</button>`:esc(step.text)}</p></aside>`;
+}
+
+/** What the tutorial needs to know about the selected sector (read-only). */
+function tutorialSelection(){
+  const h=activeSurface(),tile=h?.tiles[selectedTile];
+  if(!h||!tile||tab!=='system')return null;
+  const ready=inspectionMatches()&&inspection?.ok?inspection:null;
+  const plan=ready&&selectedBuilding?ready.buildings?.[selectedBuilding]:null;
+  return {revealed:tile.revealed,free:ready&&!tile.revealed?ready.survey.turns===0:null,canBuild:Boolean(plan?.ok),reason:plan&&!plan.ok?plan.reason:''};
+}
+
+/** Tutorial "SHOW ME": select (not act on) a nearby sector that fits the step. The server still validates any action. */
+function suggestTile(kind){
+  const h=activeSurface();
+  if(!h)return false;
+  const size=catalog.mapSize||96,core=mapCore(),cx=core%size,cy=Math.floor(core/size);
+  const working=h.tiles.filter(t=>t.building&&(t.building.condition??100)>0&&t.building.onlineFrom<=state.turn);
+  const near=(t,list,reach)=>list.some(b=>Math.abs(t.id%size-b.id%size)+Math.abs(Math.floor(t.id/size)-Math.floor(b.id/size))<=reach);
+  const open=t=>!catalog.biomes?.[t.biome]?.blocked&&t.terrain!=='hazard';
+  const candidates=h.tiles.filter(t=>kind==='scan'?!t.revealed&&near(t,working,2):t.revealed&&!t.building&&open(t)&&near(t,h.tiles.filter(x=>x.building),1));
+  if(!candidates.length)return false;
+  const best=candidates.sort((a,b)=>(Math.abs(a.id%size-cx)+Math.abs(Math.floor(a.id/size)-cy))-(Math.abs(b.id%size-cx)+Math.abs(Math.floor(b.id/size)-cy)))[0];
+  selectedTile=best.id;tab='system';render();
+  mapController?.centerOn(best.id%size,Math.floor(best.id/size));
+  return true;
 }
 
 function activeSurface(){const candidates=state.hubs.filter(h=>h.world===selectedWorld&&h.tiles.length);return candidates.find(h=>h.id===selectedHub)||candidates[0]||null;}
