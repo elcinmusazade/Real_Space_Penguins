@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 from . import __version__
 from . import engine
+from . import faults
 
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -27,6 +28,9 @@ STATIC_TYPES = {
     "art.js": "text/javascript; charset=utf-8",
     "science.js": "text/javascript; charset=utf-8",
     "styles.css": "text/css; charset=utf-8",
+    "faults.html": "text/html; charset=utf-8",
+    "faults.js": "text/javascript; charset=utf-8",
+    "faults.css": "text/css; charset=utf-8",
 }
 MAX_BODY = 300_000
 
@@ -51,6 +55,9 @@ class GameHandler(BaseHTTPRequestHandler):
         if path == "/api/health":
             self._json({"ok": True, "engine": "python", "version": __version__})
             return
+        if path == "/api/faults/catalog":
+            self._json({"ok": True, "catalog": faults.catalog()})
+            return
         name = "index.html" if path == "/" else path.lstrip("/")
         if name not in STATIC_TYPES:
             self.send_error(HTTPStatus.NOT_FOUND, "Not found")
@@ -59,7 +66,7 @@ class GameHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ("/api/new", "/api/action", "/api/validate"):
+        if path not in ("/api/new", "/api/action", "/api/validate", "/api/faults/test"):
             self._json({"ok": False, "error": "Unknown endpoint."}, HTTPStatus.NOT_FOUND)
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -80,6 +87,10 @@ class GameHandler(BaseHTTPRequestHandler):
             return
         if not isinstance(payload, dict):
             self._json({"ok": False, "error": "Expected a JSON object."}, HTTPStatus.BAD_REQUEST)
+            return
+        if path == "/api/faults/test":
+            result = faults.run_tests(payload.get("design"))
+            self._json(result, HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST)
             return
         if path == "/api/new":
             seed, loadout = payload.get("seed", "ARES-01"), payload.get("loadout", list(engine.DEFAULT_LOADOUT))

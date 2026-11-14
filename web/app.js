@@ -103,6 +103,7 @@ function header(active = 'mission') {
       <button data-action="mission" class="${active === 'mission' ? 'active' : ''}">Mission control</button>
       <button data-action="journal">Mission log</button>
       <button data-action="manual">Field manual</button>
+      <button data-action="faults">Fault lab</button>
     </nav>
     <div class="top-right">
       <span class="save-label">${icon('save', 12)} ${phase === 'game' ? (storageAvailable ? 'MISSION SAVED' : 'LOCAL SESSION') : 'FLIGHT SYSTEMS READY'}</span>
@@ -349,6 +350,7 @@ async function onAction(event) {
   const action=target.dataset.action, id=target.dataset.id;
   if(action==='backdrop'){if(event.target===target)closeModal();return;}
   if(action==='close'){closeModal();return;}
+  if(action==='faults'){location.href='/faults.html';return;}
   if(action==='manual'||action==='sources'){openModal({type:'manual',tab:action==='sources'?'sources':'how'});return;}
   if(action==='manual-tab'){modal.tab=id;render();document.querySelector(`[data-action="manual-tab"][data-id="${id}"]`)?.focus();return;}
   if(action==='journal'){openModal({type:'journal'});return;}

@@ -8,6 +8,8 @@ Python 3.10+, standard library only. `python3 -m ares.server` starts a local `Th
 | --- | --- |
 | `ares/rules.py` | Definitions for buildings, cargo, crops, research, events and terrain |
 | `ares/engine.py` | **Authoritative deterministic Python simulation**: new games, legal actions, turn resolution, forecasts, saves |
+| `ares/faults.py` | Fault Protection Lab: rule validation and deterministic orbiter fault simulation (constants in `rules.py`) |
+| `web/faults.html`, `web/faults.js`, `web/faults.css` | Rule editor and test-report page; edits rules only and asks Python for results |
 | `ares/server.py` | Serves `web/` files; accepts structured JSON game commands |
 | `web/index.html`, `web/styles.css`, `web/art.js` | Presentation, responsive layout, SVG art |
 | `web/app.js` | Main interaction controller, panels, dialog flow, browser-local autosave |
@@ -23,6 +25,8 @@ Python 3.10+, standard library only. `python3 -m ares.server` starts a local `Th
 - `POST /api/new` with `{ "seed": "ARES-01", "loadout": [...] }` — returns `{ "ok": true, "state": {...} }`.
 - `POST /api/action` with `{ "state": {...}, "action": "explore", "args": [12] }` — validates the prior state and executes one Python rule, returning `{ "ok": true, "state": {...}, "message": "..." }` or a failure.
 - `POST /api/validate` with `{ "state": {...} }` — checks a saved game.
+- `GET /api/faults/catalog` — sensors, responses, computers, and scenarios for the Fault Protection Lab editor.
+- `POST /api/faults/test` with `{ "design": { "computer": "standard", "rules": [...] } }` — validates the rules (`ares/faults.py`) and returns per-scenario results plus a no-rules baseline. A bad design returns 400 with a readable error.
 
 The API is stateless: the client submits its current JSON state for each action; Python validates it and returns a new state. Browser `localStorage` keeps saves locally. **Do not expose this development server as a secure multiplayer or authoritative online competitive service**; client-supplied state is not cryptographically trusted. The development server deliberately binds loopback by default.
 

@@ -77,5 +77,21 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 404)
 
 
+    def test_fault_lab_catalog_and_test_run(self):
+        status, _, raw = self.request("/api/faults/catalog")
+        self.assertEqual(status, 200)
+        catalog = json.loads(raw)["catalog"]
+        self.assertIn("safe_mode", catalog["responses"])
+        status, _, raw = self.request("/api/faults/test", {"design": catalog["example"]})
+        self.assertEqual(status, 200)
+        result = json.loads(raw)
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(result["results"]), len(catalog["scenarios"]))
+        status, _, raw = self.request("/api/faults/test", {"design": {"computer": "basic", "rules": [{"when": [], "then": "safe_mode"}]}})
+        self.assertEqual(status, 400)
+        status, mime, _ = self.request("/faults.html")
+        self.assertEqual((status, mime), (200, "text/html"))
+
+
 if __name__ == "__main__":
     unittest.main()
