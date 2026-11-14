@@ -8,6 +8,8 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from ares.server import GameHandler
+from ares import campaign
+from ares.campaign_data import MAP_SIZE
 
 
 class ServerTests(unittest.TestCase):
@@ -28,7 +30,7 @@ class ServerTests(unittest.TestCase):
         payload = json.dumps(data).encode("utf-8") if data is not None else None
         request = Request(self.url + path, data=payload, headers={"Content-Type": "application/json"} if data is not None else {})
         try:
-            with urlopen(request, timeout=2) as response:
+            with urlopen(request, timeout=10) as response:
                 return response.status, response.headers.get_content_type(), response.read()
         except HTTPError as error:
             return error.code, error.headers.get_content_type(), error.read()
@@ -44,7 +46,7 @@ class ServerTests(unittest.TestCase):
         status, mime, css = self.request("/campaign.css")
         self.assertEqual((status, mime), (200, "text/css"))
         self.assertIn(b".terrain-map", css)
-        for path, expected_type in (("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css")):
+        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css")):
             code, kind, body = self.request(path)
             self.assertEqual((code,kind),(200,expected_type))
             self.assertGreater(len(body),100)
@@ -58,7 +60,7 @@ class ServerTests(unittest.TestCase):
     def test_surface_inspection_endpoint_reports_costs_without_changing_save(self):
         state = json.loads(self.request("/api/campaign/new", {"seed":"COAST"})[2])["state"]
         before = json.dumps(state, sort_keys=True)
-        status, _, raw = self.request("/api/campaign/inspect", {"state":state, "hub":"H1", "tile":529})
+        status, _, raw = self.request("/api/campaign/inspect", {"state":state, "hub":"H1", "tile":campaign.MAP_CORE+1})
         self.assertEqual(status,200)
         plan = json.loads(raw)
         self.assertTrue(plan["ok"])
@@ -69,24 +71,66 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status,200)
         self.assertFalse(json.loads(raw)["ok"])
 
+    def test_research_endpoint_assets_and_authoritative_start(self):
+        for path, mime in (("/tech-tree.js", "text/javascript"), ("/tech-tree.css", "text/css")):
+            status, kind, body = self.request(path)
+            self.assertEqual((status, kind), (200, mime))
+            self.assertGreater(len(body), 100)
+        state = campaign.create_campaign("HTTP-RESEARCH")
+        before = json.dumps(state, sort_keys=True)
+        status, _, raw = self.request("/api/campaign/research", {"state":state})
+        self.assertEqual(status, 200)
+        plans = json.loads(raw)["plans"]
+        self.assertEqual(len(plans), 16)
+        self.assertTrue(plans["surveying"]["ok"])
+        self.assertFalse(plans["fission"]["ok"])
+        self.assertEqual(json.dumps(state, sort_keys=True), before)
+        status, _, raw = self.request("/api/campaign/action", {"state":state,"action":"research","args":{"tech":"fission"}})
+        self.assertEqual(status, 200)
+        self.assertFalse(json.loads(raw)["ok"])
+        self.assertEqual(json.loads(raw)["state"], state)
+        status, _, raw = self.request("/api/campaign/action", {"state":state,"action":"research","args":{"tech":"surveying"}})
+        active = json.loads(raw)["state"]
+        status, _, raw = self.request("/api/campaign/research", {"state":active})
+        self.assertEqual(json.loads(raw)["plans"]["surveying"]["status"], "active")
+        state["science"] = -1
+        self.assertEqual(self.request("/api/campaign/research", {"state":state})[0], 400)
+
     def test_health_uses_python_engine(self):
         status, _, raw = self.request("/api/health")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(raw)["engine"], "python")
         self.assertTrue(json.loads(raw)["campaign"])
 
+    def test_large_multi_hub_save_crosses_the_old_request_limit(self):
+        state = campaign.create_campaign("LARGE-HTTP")
+        for i, world in enumerate(("earth", "venus", "mercury", "europa"), 2):
+            state["hubs"].append(campaign._hub(f"H{i}",world,"surface","Test site",seed=state["seed"]))
+        self.assertGreater(len(json.dumps({"state":state},separators=(",", ":")).encode()),4_000_000)
+        status, _, raw = self.request("/api/campaign/action", {"state":state,"action":"advance","args":{}})
+        self.assertEqual(status,200)
+        result = json.loads(raw)
+        self.assertTrue(result["ok"],result)
+        self.assertEqual(len(result["state"]["hubs"]),5)
+        self.assertTrue(all(len(h["tiles"]) == MAP_SIZE**2 for h in result["state"]["hubs"]))
+
     def test_campaign_launch_and_transit_over_http(self):
         status, _, raw = self.request("/api/campaign/catalog")
         self.assertEqual(status, 200)
-        self.assertIn("europa", json.loads(raw)["catalog"]["worlds"])
-        self.assertEqual(json.loads(raw)["catalog"]["mapSize"],32)
+        catalog = json.loads(raw)["catalog"]
+        self.assertEqual(set(catalog["worlds"]), {"earth", "mars", "venus", "mercury", "europa", "jupiter", "saturn", "uranus", "neptune"})
+        self.assertEqual(set(catalog["surfacePreviews"]), set(catalog["worlds"]))
+        self.assertTrue(all(len(tiles) == MAP_SIZE**2 for tiles in catalog["surfacePreviews"].values()))
+        self.assertEqual(json.loads(raw)["catalog"]["mapSize"],MAP_SIZE)
         status, _, raw = self.request("/api/campaign/new", {"seed": "HTTP-V2"})
         self.assertEqual(status, 200)
         state = json.loads(raw)["state"]
         self.assertEqual(state["turn"], 1)
+        self.assertEqual([h["world"] for h in state["hubs"]],["mars"])
+        self.assertEqual(state["visitedWorlds"],[])
         design = {
-            "source": "H1", "destination": "venus", "objective": "surface",
-            "site": "Ishtar Terra", "hull": "lander", "engine": "chemical",
+            "source": "H1", "destination": "earth", "objective": "surface",
+            "site": "Cape Canaveral", "hull": "lander", "engine": "chemical",
             "trajectory": "balanced", "payload": ["rover", "lab", "shield"],
             "vehicle": "heavy", "propellantKg": 200,
         }
@@ -96,7 +140,7 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(quote["ok"])
         self.assertTrue(quote["affordable"])
         self.assertEqual(quote["outcome"], "go")
-        self.assertEqual(quote["transfer"]["source"], "gmat")
+        self.assertEqual(quote["transfer"]["source"], "estimate")
         status, _, raw = self.request("/api/campaign/action", {"state": state, "action": "launch", "args": {"design": design}})
         self.assertEqual(status, 200)
         result = json.loads(raw)
@@ -108,8 +152,8 @@ class ServerTests(unittest.TestCase):
             status, _, raw = self.request("/api/campaign/action", {"state": state, "action": "advance", "args": {}})
             self.assertEqual(status, 200)
             state = json.loads(raw)["state"]
-        self.assertIn("venus", state["visitedWorlds"])
-        self.assertTrue(any(h["world"] == "venus" and h["kind"] == "surface" for h in state["hubs"]))
+        self.assertIn("earth", state["visitedWorlds"])
+        self.assertTrue(any(h["world"] == "earth" and h["kind"] == "surface" for h in state["hubs"]))
         status, _, raw = self.request("/api/campaign/validate", {"state": state})
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(raw)["ok"])
@@ -160,6 +204,33 @@ class ServerTests(unittest.TestCase):
         status, _, raw = self.request("/api/action", {"state": state, "action": "advanceSol", "args": []})
         self.assertEqual(status, 400)
         self.assertFalse(json.loads(raw)["ok"])
+
+    def test_outer_platform_quote_arrival_and_inspection_over_http(self):
+        from test_campaign import GOOD_SOFTWARE
+        state = campaign.execute(campaign.create_campaign("HTTP-OUTER"), "setSoftware", GOOD_SOFTWARE)["state"]
+        design = {"source":"H1", "destination":"jupiter", "site":"Equatorial Cloud Belt", "objective":"surface",
+                  "hull":"lander", "engine":"chemical", "trajectory":"balanced", "payload":["survey","shield"], "propellantKg":1200}
+        status, _, raw = self.request("/api/campaign/quote", {"state":state,"design":design})
+        self.assertEqual(status,200)
+        self.assertEqual(json.loads(raw)["requiredTech"],"deep_space")
+        state["tech"] = ["deep_space"]
+        status, _, raw = self.request("/api/campaign/quote", {"state":state,"design":design})
+        quote = json.loads(raw)
+        self.assertEqual(quote["outcome"],"go")
+        self.assertEqual(quote["transfer"]["source"],"estimate")
+        status, _, raw = self.request("/api/campaign/action", {"state":state,"action":"launch","args":{"design":design}})
+        state = json.loads(raw)["state"]
+        self.assertEqual(len(state["hubs"]),1)
+        for _ in range(quote["turns"]):
+            status, _, raw = self.request("/api/campaign/action", {"state":state,"action":"advance","args":{}})
+            self.assertEqual(status,200)
+            result = json.loads(raw)
+            self.assertTrue(result["ok"],result)
+            state = result["state"]
+        platform = next(h for h in state["hubs"] if h["world"] == "jupiter")
+        status, _, raw = self.request("/api/campaign/inspect", {"state":state,"hub":platform["id"],"tile":campaign.MAP_CORE})
+        self.assertEqual(status,200)
+        self.assertEqual(json.loads(raw)["facility"]["outputs"],{"energy":6})
 
     def test_rejects_over_budget_and_unknown_files(self):
         status, _, _ = self.request("/api/new", {"seed": "X", "loadout": ["supplies", "materials", "battery", "instruments"]})

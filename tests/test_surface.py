@@ -7,6 +7,7 @@ import subprocess
 import unittest
 
 from ares import campaign, surface
+from campaign_fixtures import earth_campaign
 from ares.campaign_data import campaign_catalog, MAP_SIZE, PAYLOADS, RESEARCH
 
 CORE = campaign.MAP_CORE
@@ -14,7 +15,7 @@ CORE = campaign.MAP_CORE
 
 class SurfaceTests(unittest.TestCase):
     def setUp(self):
-        self.state = campaign.create_campaign("LIVING-MAPS")
+        self.state = earth_campaign("LIVING-MAPS")
 
     def act(self, action, **args):
         result = campaign.execute(self.state, action, args)
@@ -168,14 +169,14 @@ class SurfaceTests(unittest.TestCase):
             s = deepcopy(self.state)
             s["hubs"][0]["tiles"][0]["biome"] = value
             self.assertFalse(campaign.validate(s)["ok"])
-        for index in (-1, True, 1024, [], None):
+        for index in (-1, True, MAP_SIZE * MAP_SIZE, [], None):
             self.assertFalse(campaign.inspect_surface(self.state,"H1",index)["ok"])
         self.assertFalse(campaign.inspect_surface(self.state,"missing",0)["ok"])
         legacy = deepcopy(self.state)
         legacy["hubs"][0].update(tiles=[], site=[])
         self.assertFalse(campaign.validate(legacy)["ok"])
         legacy = deepcopy(self.state)
-        legacy["hubs"][1].update(tiles=legacy["hubs"][1]["tiles"][:25], site=[])
+        legacy["hubs"][0].update(tiles=legacy["hubs"][0]["tiles"][:25], site=[])
         self.assertFalse(campaign.validate(legacy)["ok"])
 
     @unittest.skipUnless(shutil.which("node"), "Optional canvas/controller check requires Node")

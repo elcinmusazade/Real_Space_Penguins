@@ -119,3 +119,54 @@ The user chose Living isometric, asked for richer geography including seas, remo
 Use terrain and production as the depth implementation: coastal water intake, fertile-food/geology/solar bonuses, site preparation costs, blocked water/fissures and a water-to-oxygen plant. Inspection and execution share Python rules. Selecting a tile does not spend resources; explicit survey/build buttons follow visible cost and availability information. Nearby scans remain free; a hub can run one energy-funded regional 3×3 survey in 1–3 turns. Survey Station payload and Remote Sensing research replace rover options while keeping old saves and missions usable.
 
 Use code-native Canvas2D landscapes and subtle ambient animation, preserving the existing solar navigator and all flight mechanics. No map rotation or real-time simulation is introduced. Long-run balancing and actual browser layout/performance still need play-testing.
+
+
+## D-016 — Expanded playable regions
+
+**Status:** Implemented. **Date:** 2026-11-14. **Reason:** The user found the playable map too small.
+
+Increase campaign surfaces to 96×96 sectors (9,216), nine times the previous area. Center existing 32×32/5×5 saves without moving their relative buildings, discovered deposits or survey destinations. Extend seeded geography using its original coordinate origin. This supersedes D-009's map dimensions; the Classic 6×6 mode remains unchanged.
+
+Retain survey costs/timing and building rules. Fit zoom, viewport-aware rendering and a minimap viewport outline make the larger regions navigable. Retire completed survey history at its existing cap so exploration can continue. Use IndexedDB for the larger multi-hub saves, committing before deleting the old localStorage copy, and raise only the campaign HTTP request limit to 96 MB. No external database or dependency is introduced.
+
+
+## D-017 — Earth-only beginning and optional mission planning
+
+**Status:** Implemented. **Date:** 2026-11-14. **Reason:** User rejected a free Mars hub before going to Mars and automatic mission-page opening.
+
+New campaigns start on the playable Earth map with Earth HQ only, no off-world visited flags, and no automatic AURA or Shipyard overlay. Browsing Mars shows the pre-landing preview; arriving surface missions create its hubs. Starting the planner or opening AURA is an explicit action. The first guide step teaches scanning Earth, and Logistics explains the need for a second hub before dispatch.
+
+Preserve existing saved campaigns, including their Mars hubs; users can select New campaign → Start on Earth for the revised beginning. This supersedes earlier automatic-startup-briefing and pre-established-Mars defaults. Flight rules, starting Earth resources and Classic V1 are unchanged. Existing Mars survival/balance regression tests now use an explicit established-colony fixture; separate tests cover the real Earth-only start, first landing and UI startup/reset.
+
+
+## D-018 — Connected research with strategic consequences
+
+**Status:** Implemented. **Date:** 2026-11-15. **Reason:** User requested a tree appearance, more depth and importance for technology.
+
+Replace the small card grid with a connected four-branch, four-tier technology tree. Display each benefit, prerequisite, lab/field requirement, cost and completion time; allow inspection of locked nodes and highlight the path to a selection. Keep one paid project at a time. Early technologies improve ordinary operations on Earth; later projects need research infrastructure or experience and open significant equipment or supply-chain capabilities. The exact 16 technologies and balance values are implementation choices, not independently supplied requirements.
+
+Use real Python effects and unlocks: 5×5 surveys, production/resource savings, construction discounts, hazard mitigation, advanced engines/freighters/super-heavy launches, Europa landings and a sunlight-independent reactor. Basic Mars missions and Europa remote/orbital science remain possible without these unlocks. Lab requirements apply at project start; existing paid research, flights and buildings are preserved. New quotes/construction enforce unlocks; saved assets are not removed. Physical flight checks and GMAT attribution are unchanged, and all research coefficients remain explicit game estimates. Preserve Earth-first startup, no campaign AP, no ending and Classic V1.
+
+Use native HTML controls plus SVG dependency paths without new runtime dependencies. Python supplies both availability and execution rules. Browser verification remains pending under the earlier preview denial; engine/HTTP tests, Node controller checks and an offline diagram inspection provide bounded verification.
+
+
+## D-019 — Mars headquarters and Earth reached through travel
+
+**Status:** Implemented. **Date:** 2026-11-15. **Reason:** The user explicitly made Mars the home page and starting place, with no Earth hub until travelling there. This supersedes D-017 and the Earth-headquarters defaults in D-013/D-018.
+
+Start with one playable Mars control hub, command center, solar array and the former headquarters stockpile/income. Preserve the protected, uncrewed command role so the programme can finance missions without an Earth supply base. Ordinary Mars settlements retain their existing crew/hazard mechanics. The home button, startup, reset, guide and lab shortcut use Mars. Do not automatically open planning.
+
+Add Earth surface/orbital/science missions from non-Earth origins, with three landing sites and a game-estimate approach. Earth landings get ordinary outpost supplies and construction; no free Earth headquarters inventory or income. Remote survey, flyby and orbital missions do not unlock an Earth surface base. Delayed shipments and Earth departures remain usable. Existing Earth GMAT departure checks remain intact; Mars-to-Earth transfers, Earth capture/entry and reused eclipse fault scenario are game assumptions, not new validated trajectories. Reuse the Earth's constants already present in the local window builder.
+
+Keep existing browser saves intact; Start on Mars explicitly replaces a prior run. Historical saves with a Mars base open there, while Earth-only legacy saves fall back to their existing base until reset. Do not silently delete earned hubs or missions. Mars HQ counts as a surface base for programme goals, but home-world presence alone does not satisfy a completed Mars mission requirement in research. Classic V1 and the rest of the technology tree are preserved.
+
+
+## D-020 — Maps for the four outer planets
+
+**Status:** Implemented. **Date:** 2026-11-15. **Reason:** User asked for maps on planets that lacked them.
+
+Jupiter, Saturn, Uranus and Neptune become map/mission destinations alongside the existing five worlds. Use distinct seeded 96×96 cloud layers and fictional floating robotic platforms, rather than claiming these giants have solid landing surfaces. This implementation choice reuses the existing saved surface objective/hub type, surveys, connected construction, hazards, supplies and research system. Deep-Space Engineering unlocks platform deployment; a survey station and shield are mandatory, habitats rejected, and an actual successful deployment creates the hub. Previewing a map creates nothing. Keep Mars HQ, Earth travel, old saves, Classic V1 and no campaign ending unchanged.
+
+Give platforms a condition-scaled 6-energy command supply so weak sunlight does not make them unusable before expansion. Condensers/refineries reuse water/material building mechanics with appropriate names. Their technology and all coefficients are fictional game balance. Blocked currents/vortices, condensate deposits, site preparation, ring shadows and weak light preserve meaningful site and supply choices.
+
+Do not expand or relabel the existing four-destination GMAT table. New outer routes, Earth launch energy/direction, capture allowances and light-time approximations are explicit estimates. Retain rocket mass checks and propellant checks, hide nonexistent launch windows, and identify estimated light-times in the map. Live browser verification remains pending under the earlier preview denial; use engine/HTTP/controller checks and offline production-Canvas renders.

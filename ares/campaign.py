@@ -18,10 +18,11 @@ from math import ceil
 from typing import Any
 
 from . import faults, flight, orders, surface
+from . import research as research_rules
 from .campaign_data import (
     ARRIVAL_SCENARIO, BUDGET_MAX, BUDGET_MIN, BUDGET_START, BUILDINGS, DARK_TURNS_TO_LOSE,
     ENGINES, EXAMPLE_ORDERS, FORECAST_LEAD, GOALS, HAZARDS, HULLS, LAUNCH_VEHICLES, MAX_RESOURCE,
-    PAYLOADS, PREPARE_COST, REPAIR_COST, RESEARCH, RESOURCE_KEYS, REVIEW_EVERY, ROUTES,
+    ATMOSPHERIC_WORLDS, PAYLOADS, PREPARE_COST, REPAIR_COST, RESEARCH, RESOURCE_KEYS, REVIEW_EVERY, ROUTES,
     SCENARIO_INTENSITY, TRAJECTORIES, WEAR, WORLDS, MAP_SIZE,
 )
 from .fault_data import FAULT_COMPUTERS, FAULT_EXAMPLE_RULES
@@ -71,17 +72,17 @@ def _crew() -> list[dict]:
 
 
 def _has_surface(hub: dict) -> bool:
-    return hub.get("kind") == "surface" or (hub.get("kind") == "control" and hub.get("world") == "earth")
+    return hub.get("kind") in ("surface", "control")
 
 
 def _hub(identifier: str, world: str, kind: str, site: str, *, payload: list[str] | None = None, starter: bool = False, seed: str = "HORIZON-01") -> dict:
     payload = payload or []
-    is_earth = world == "earth"
+    is_control = kind == "control"
     is_orbit = kind == "orbital"
     staffed = world == "mars" and kind == "surface" and (starter or "habitat" in payload)
     inv = (
         _stocks(energy=130, materials=260, fuel=260, water=110, food=110, oxygen=110, heat=90)
-        if is_earth else
+        if is_control else
         _stocks(energy=55, materials=85, fuel=28, water=48, food=51, oxygen=52, heat=42)
         if starter else
         _stocks(energy=28, materials=24, fuel=15, water=18, food=24, oxygen=24, heat=19)
@@ -93,13 +94,15 @@ def _hub(identifier: str, world: str, kind: str, site: str, *, payload: list[str
         inv["fuel"] += 14
         inv["food"] += 12
     tiles = _tiles(world, seed, site) if _has_surface({"kind": kind, "world": world}) else []
+    if tiles and is_control:
+        tiles[MAP_CORE]["building"] = _building("command")
     if tiles and "lab" in payload:
         tiles[MAP_CORE - MAP_SIZE]["terrain"] = "science"
         tiles[MAP_CORE - MAP_SIZE]["building"] = _building("laboratory")
     if tiles and "shield" in payload:
         tiles[MAP_CORE + 1]["building"] = _building("shield")
     return {
-        "id": identifier, "name": "Earth Mission Control" if is_earth else f"{WORLDS[world]['name']} {'Orbital Hub' if is_orbit else site}",
+        "id": identifier, "name": f"{WORLDS[world]['name']} Mission Control" if is_control else f"{WORLDS[world]['name']} {'Orbital Hub' if is_orbit else site}",
         "world": world, "kind": kind, "site": site,
         "stocks": inv, "tiles": tiles,
         "surveyUntil": 0, "crew": _crew() if staffed else [],
@@ -115,15 +118,15 @@ def create_campaign(seed: str = "HORIZON-01") -> dict:
     state = {
         "version": VERSION, "mode": "campaign", "seed": seed, "turn": 1,
         "credits": 390, "science": 32, "scienceTotal": 32,
-        "hubs": [_hub("H1", "earth", "control", "Earth HQ", seed=seed), _hub("H2", "mars", "surface", "Arcadia Planitia", starter=True, seed=seed)],
+        "hubs": [_hub("H1", "mars", "control", "Mars HQ", seed=seed)],
         "missions": [], "shipments": [], "surveys": [], "routes": [],
         "tech": [], "research": None, "event": None,
-        "visitedWorlds": ["mars"], "milestone": False,
-        "nextId": 3, "log": [],
+        "visitedWorlds": [], "milestone": False,
+        "nextId": 2, "log": [],
     }
     _upgrade_v3(state)
-    _log(state, "Earth Mission Control online. Mars outpost Arcadia is established.")
-    _log(state, "Launch windows open and close with the planets. Check your flight software before every launch.")
+    _log(state, "Mars Mission Control online. Explore your home base. Earth has no hub until your lander arrives.")
+    _log(state, "Departures from Mars use game-estimate transfers. Check your flight software and propellant before every launch.")
     return state
 
 
@@ -207,11 +210,17 @@ def validate(state: Any) -> dict:
         return {"ok": False, "error": "Invalid route records."}
     if len(state["missions"]) > 1000 or len(state["shipments"]) > 1000 or len(state["surveys"]) > 1000 or len(state["log"]) > 90:
         return {"ok": False, "error": "Campaign history exceeds allowed size."}
-    # Old 5×5 campaign saves are expanded without losing constructed structures.
-    # This migration is deliberately idempotent and never modifies the caller.
-    legacy_hubs = {h["id"] for h in state["hubs"] if isinstance(h, dict) and isinstance(h.get("id"), str) and h.get("kind") == "surface" and isinstance(h.get("tiles"), list) and len(h["tiles"]) == 25}
+    # Center older 5×5/32×32 maps inside the larger world on a deep copy.
+    # Earth keeps its control-hub identity; every existing tile and survey moves
+    # by the same offset, preserving buildings, discoveries and pending orders.
+    legacy_hubs = {h["id"]: {25: 5, 1024: 32}[len(h["tiles"])] for h in state["hubs"]
+                   if isinstance(h, dict) and isinstance(h.get("id"), str) and _has_surface(h)
+                   and isinstance(h.get("tiles"), list) and len(h["tiles"]) in (25, 1024)}
     if legacy_hubs:
         state = deepcopy(state)
+        def expanded_id(index, size):
+            offset = MAP_CENTER - size // 2
+            return (index // size + offset) * MAP_SIZE + index % size + offset
         for old_hub in state["hubs"]:
             if not isinstance(old_hub, dict) or old_hub.get("id") not in legacy_hubs:
                 continue
@@ -219,18 +228,21 @@ def validate(state: Any) -> dict:
                 return {"ok": False, "error": "Invalid legacy hub world."}
             if not isinstance(old_hub.get("site"), str):
                 return {"ok": False, "error": "Invalid legacy hub site."}
-            if any(not isinstance(tile, dict) for tile in old_hub["tiles"]):
+            if any(not isinstance(tile, dict) or type(tile.get("id")) is not int or tile["id"] != i
+                   for i, tile in enumerate(old_hub["tiles"])):
                 return {"ok": False, "error": "Invalid legacy terrain sector."}
+            size = legacy_hubs[old_hub["id"]]
             expanded = _tiles(old_hub["world"], state["seed"], old_hub["site"])
             for old_idx, tile in enumerate(old_hub["tiles"]):
-                x, y = old_idx % 5 - 2 + MAP_CENTER, old_idx // 5 - 2 + MAP_CENTER
-                index = y * MAP_SIZE + x
+                index = expanded_id(old_idx, size)
                 expanded[index] = {**tile, "id": index}
             old_hub["tiles"] = expanded
-        for expedition in state["surveys"]:
-            if isinstance(expedition, dict) and expedition.get("hub") in legacy_hubs and type(expedition.get("tile")) is int and 0 <= expedition["tile"] < 25:
-                i = expedition["tile"]
-                expedition["tile"] = (i // 5 - 2 + MAP_CENTER) * MAP_SIZE + (i % 5 - 2 + MAP_CENTER)
+        for survey in state["surveys"]:
+            if isinstance(survey, dict) and survey.get("hub") in legacy_hubs:
+                size = legacy_hubs[survey["hub"]]
+                if type(survey.get("tile")) is not int or not 0 <= survey["tile"] < size * size:
+                    return {"ok": False, "error": "Invalid legacy survey sector."}
+                survey["tile"] = expanded_id(survey["tile"], size)
     # Existing Earth HQ saves had no terrain. Add a playable map once, preserving
     # the control hub's identity, stockpile, and mission/shipment references.
     if any(isinstance(h, dict) and h.get("world") == "earth" and h.get("kind") == "control" and h.get("tiles") == [] for h in state["hubs"]):
@@ -282,6 +294,8 @@ def validate(state: Any) -> dict:
     for expedition in state["surveys"]:
         if not isinstance(expedition, dict) or expedition.get("status") not in ("en_route", "returned") or type(expedition.get("arrivesAt")) is not int or type(expedition.get("tile")) is not int or not 0 <= expedition["tile"] < MAP_TILES or expedition.get("hub") not in hub_ids:
             return {"ok": False, "error": "Invalid survey history."}
+        if type(expedition.get("radius", 1)) is not int or expedition.get("radius", 1) not in (1, 2):
+            return {"ok": False, "error": "Invalid survey radius."}
     research = state.get("research")
     if research is not None and (not isinstance(research, dict) or research.get("id") not in RESEARCH or type(research.get("completesAt")) is not int):
         return {"ok": False, "error": "Invalid active research."}
@@ -401,10 +415,12 @@ def mission_quote(state: dict, design: Any) -> dict:
     if isinstance(payload, list):
         payload = ["survey" if p == "rover" else p for p in payload]
     site = design.get("site", "")
-    if not source or world not in WORLDS or world == "earth" or kind not in ("surface", "orbital", "survey"):
+    if not source or world not in WORLDS or kind not in ("surface", "orbital", "survey"):
         return {"ok": False, "error": "Choose a valid origin, destination, and mission objective."}
     if not _active(source):
         return {"ok": False, "error": "That departure hub is not operating."}
+    if source["world"] == world == "earth":
+        return {"ok": False, "error": "Earth arrival missions must depart from a hub on another world."}
     if not hull or not engine or not traj:
         return {"ok": False, "error": "Choose a valid hull, engine, and trajectory."}
     vehicle = design.get("vehicle", "atlas_v_401")
@@ -415,6 +431,12 @@ def mission_quote(state: dict, design: Any) -> dict:
         return {"ok": False, "error": f"Propellant load must be a whole number of kg from 0 to {flight.PROPELLANT_MAX_KG:,}."}
     if not isinstance(payload, list) or any(not isinstance(p, str) for p in payload) or len(payload) != len(set(payload)) or any(p not in PAYLOADS for p in payload):
         return {"ok": False, "error": "Choose each valid payload module at most once."}
+    for category, item in (("engine", design["engine"]), ("hull", design["hull"]),
+                           ("vehicle", vehicle if source["world"] == "earth" else ""),
+                           ("surface", world if kind == "surface" else "")):
+        required = research_rules.locked(state, category, item)
+        if required:
+            return {"ok": False, "error": f"Research {RESEARCH[required]['name']} to unlock this {category} option.", "requiredTech": required}
     carried = engine["mass"] + sum(PAYLOADS[p]["mass"] for p in payload)
     if carried > hull["capacity"]:
         return {"ok": False, "error": f"Engine and payload exceed hull capacity ({carried:,}/{hull['capacity']:,} kg).", "mass": carried}
@@ -426,10 +448,14 @@ def mission_quote(state: dict, design: Any) -> dict:
             return {"ok": False, "error": "Surface outposts require a lander or freighter hull."}
         if "survey" not in payload and "habitat" not in payload:
             return {"ok": False, "error": "A new outpost needs a survey station or habitat payload."}
-        if world in ("venus", "mercury", "europa") and "shield" not in payload:
+        if world in ("venus", "mercury", "europa", *ATMOSPHERIC_WORLDS) and "shield" not in payload:
             return {"ok": False, "error": "Harsh-world robotic outposts need an environmental shield."}
+        if world in ATMOSPHERIC_WORLDS and "survey" not in payload:
+            return {"ok": False, "error": "Atmospheric platforms require a robotic survey station payload."}
+        if world in ATMOSPHERIC_WORLDS and "habitat" in payload:
+            return {"ok": False, "error": "Atmospheric platforms are robotic; remove the crew habitat payload."}
         rescue = _lost_site_hub(state, world, site)
-        if not rescue and any(h["world"] == world and h["kind"] == "surface" and h["site"] == site for h in state["hubs"]):
+        if not rescue and any(h["world"] == world and _has_surface(h) and h["site"] == site for h in state["hubs"]):
             return {"ok": False, "error": "That site already has an outpost. Select another site."}
         if any(m["destination"] == world and m["objective"] == "surface" and m["site"] == site and m["status"] == "in_flight" for m in state["missions"]):
             return {"ok": False, "error": "Another mission is already deploying to that site."}
@@ -472,7 +498,10 @@ def mission_quote(state: dict, design: Any) -> dict:
         "windows": flight.upcoming(world, state["turn"]) if from_earth else [],
         "arrivalTurn": state["turn"] + checked["turns"],
         "affordable": source["stocks"]["materials"] >= materials and source["stocks"]["fuel"] >= fuel and state["credits"] >= credits,
-        "notice": "Earth departures: NASA GMAT data (DE421 ephemeris, Atlas V 401 curve), Sun-only two-body transfers. Other values are labelled game estimates." if from_earth else "Departures from off-Earth hubs use game estimates; no GMAT data yet.",
+        "notice": ("Outer-planet routes, capture/entry, launch energy and direction are game estimates; no GMAT transfer data. Floating platforms are fictional game technology."
+                   if base["source"] == "estimate" and world in ATMOSPHERIC_WORLDS else
+                   "Earth departures: NASA GMAT data (DE421 ephemeris, Atlas V 401 curve), Sun-only two-body transfers. Other values are labelled game estimates." if from_earth else
+                   "Departures from off-Earth hubs use game estimates; no GMAT data yet."),
     }
 
 
@@ -572,6 +601,13 @@ def _terrain(seed: str, hub: dict, tile_id: int) -> str:
     if tile_id in specials:
         return specials[tile_id]
     biome = hub["tiles"][tile_id].get("biome")
+    if hub["world"] in ATMOSPHERIC_WORLDS:
+        if surface.BIOMES[biome].get("blocked"):
+            return "hazard"
+        if biome == "condensate":
+            return "ice"  # Shared saved resource code; UI calls this a condensate deposit.
+        roll = _roll(seed, hub["world"], hub["site"], tile_id)
+        return "science" if roll < .25 else "ridge" if roll < .55 else "plain"
     if biome in surface.WATER:
         return "plain"
     if biome in ("lava", "fissure"):
@@ -610,14 +646,16 @@ def _reveal(state: dict, hub: dict, tile_id: int) -> str:
         hub["stocks"]["energy"] = max(0, hub["stocks"]["energy"] - 3)
     state["science"] += reward
     state["scienceTotal"] += reward
-    return f"{hub['name']}: sector {tile_id + 1} revealed ({terrain}); +{reward} science."
+    label = {"ice": "condensate", "ridge": "aerosol resources"}.get(terrain, terrain) if hub["world"] in ATMOSPHERIC_WORLDS else terrain
+    return f"{hub['name']}: sector {tile_id + 1} revealed ({label}); +{reward} science."
 
 
 def _survey_plan(state: dict, hub: dict, tile_id: int) -> dict:
     tile = hub["tiles"][tile_id]
     local = any(t["building"] and t["building"]["condition"] > 0 and t["building"]["active"] and t["building"]["onlineFrom"] <= state["turn"] and abs(tile_id % MAP_SIZE - t["id"] % MAP_SIZE) + abs(tile_id // MAP_SIZE - t["id"] // MAP_SIZE) <= 2 for t in hub["tiles"])
     distance = abs(tile_id % MAP_SIZE - MAP_CENTER) + abs(tile_id // MAP_SIZE - MAP_CENTER)
-    energy = 0 if local else 4 + min(12, distance // 2)
+    radius = 2 if "wideband" in state["tech"] else 1
+    energy = 0 if local else 4 + min(12, distance // 2) + (8 if radius == 2 else 0)
     turns = 0 if local else max(1, min(3, ceil(distance / 8)) - int("surveying" in state["tech"]))
     reason = ""
     if not _active(hub):
@@ -630,7 +668,7 @@ def _survey_plan(state: dict, hub: dict, tile_id: int) -> dict:
         reason = f"Regional survey in progress until turn {hub['surveyUntil']}."
     elif hub["stocks"]["energy"] < energy:
         reason = f"Survey requires {energy} energy."
-    return {"ok": not reason, "reason": reason, "energy": energy, "turns": turns, "area": 1 if local else 9}
+    return {"ok": not reason, "reason": reason, "energy": energy, "turns": turns, "area": 1 if local else (radius * 2 + 1) ** 2, "radius": 0 if local else radius}
 
 
 def _explore(state: dict, hub_id: str, tile_id: Any) -> dict:
@@ -645,8 +683,12 @@ def _explore(state: dict, hub_id: str, tile_id: Any) -> dict:
     hub["stocks"]["energy"] -= plan["energy"]
     hub["surveyUntil"] = state["turn"] + plan["turns"]
     identifier = _next_id(state, "S")
-    state["surveys"].append({"id": identifier, "hub": hub_id, "tile": tile_id, "departed": state["turn"], "arrivesAt": hub["surveyUntil"], "status": "en_route"})
-    return _success(state, f"Regional survey {identifier} started: up to 9 sectors in {plan['turns']} turns; {plan['energy']} energy.")
+    if len(state["surveys"]) >= 1000:
+        completed = next((i for i, item in enumerate(state["surveys"]) if item["status"] == "returned"), None)
+        if completed is not None:
+            state["surveys"].pop(completed)
+    state["surveys"].append({"id": identifier, "hub": hub_id, "tile": tile_id, "departed": state["turn"], "arrivesAt": hub["surveyUntil"], "radius": plan["radius"], "status": "en_route"})
+    return _success(state, f"Regional survey {identifier} started: up to {plan['area']} sectors in {plan['turns']} turns; {plan['energy']} energy.")
 
 
 def _neighbors(tile_id: int) -> list[int]:
@@ -656,23 +698,29 @@ def _neighbors(tile_id: int) -> list[int]:
 def _construction_plan(state: dict, hub: dict, tile_id: int, kind: str) -> dict:
     tile, specs = hub["tiles"][tile_id], BUILDINGS[kind]
     biome = surface.BIOMES[tile["biome"]]
-    materials = specs["materials"] + biome.get("siteCost", 0)
+    discount = .8 if "modular" in state["tech"] else 1
+    materials = ceil((specs["materials"] + biome.get("siteCost", 0)) * discount)
+    site_cost = materials - ceil(specs["materials"] * discount)
+    turns = max(1, specs["turns"] - int("modular" in state["tech"]))
+    required = research_rules.locked(state, "building", kind)
     reason = ""
     if not _active(hub):
         reason = "This hub is not operating."
+    elif required:
+        reason = f"Research {RESEARCH[required]['name']} to unlock this facility."
     elif not tile["revealed"] or tile["building"]:
         reason = "Construction requires an empty surveyed sector."
     elif biome.get("blocked") or tile["terrain"] == "hazard":
-        reason = "Open water and unstable ground cannot support a facility. Build on adjacent land."
+        reason = "Vortices and jet streams cannot support a platform. Choose a stable cloud sector." if hub["world"] in ATMOSPHERIC_WORLDS else "Open water and unstable ground cannot support a facility. Build on adjacent land."
     elif not any(hub["tiles"][n]["building"] for n in _neighbors(tile_id)):
         reason = "Connect this module to an existing facility along an edge."
     elif kind == "extractor" and tile["terrain"] != "ice" and not surface.coastal(hub, tile):
-        reason = "A water plant needs an ice deposit or land beside Earth water."
+        reason = "A cloud condenser needs a surveyed condensate deposit." if hub["world"] in ATMOSPHERIC_WORLDS else "A water plant needs an ice deposit or land beside Earth water."
     elif kind == "greenhouse" and hub["world"] not in ("earth", "mars"):
         reason = "Greenhouses are available on Earth and Mars."
     elif hub["stocks"]["materials"] < materials or hub["stocks"]["energy"] < specs["energy"]:
         reason = f"Construction requires {materials} materials and {specs['energy']} energy."
-    return {"ok": not reason, "reason": reason, "materials": materials, "energy": specs["energy"], "turns": specs["turns"], "siteCost": biome.get("siteCost", 0), **surface.production(hub, tile, kind)}
+    return {"ok": not reason, "reason": reason, "materials": materials, "energy": specs["energy"], "turns": turns, "requiredTech": required, "siteCost": site_cost, **surface.production(hub, tile, kind, state["tech"])}
 
 
 def inspect_surface(state: dict, hub_id: str, tile_id: Any) -> dict:
@@ -684,7 +732,7 @@ def inspect_surface(state: dict, hub_id: str, tile_id: Any) -> dict:
     return {"ok": True, "hub": hub_id, "tile": tile_id,
             "survey": _survey_plan(state, hub, tile_id),
             "buildings": {kind: _construction_plan(state, hub, tile_id, kind) for kind in BUILDINGS},
-            "facility": surface.production(hub, tile, tile["building"]["type"]) if tile["building"] else None}
+            "facility": surface.production(hub, tile, tile["building"]["type"], state["tech"]) if tile["building"] else None}
 
 
 def _construct(state: dict, hub_id: str, tile_id: Any, kind: str) -> dict:
@@ -711,15 +759,10 @@ def _assign_crew(state: dict, hub_id: str, crew_index: Any, assignment: str) -> 
 
 
 def _research(state: dict, tech: str) -> dict:
-    if tech not in RESEARCH:
-        return _fail(state, "Unknown technology.")
-    if state["research"]:
-        return _fail(state, "Another research programme is already running.")
+    checked = research_rules.plan(state, tech)
+    if not checked["ok"]:
+        return _fail(state, checked["reason"])
     specs = RESEARCH[tech]
-    if tech in state["tech"] or any(req not in state["tech"] for req in specs["requires"]):
-        return _fail(state, "This technology is researched already or has unmet prerequisites.")
-    if state["science"] < specs["science"] or state["credits"] < specs["credits"]:
-        return _fail(state, "Insufficient science data or mission credits.")
     state["science"] -= specs["science"]
     state["credits"] -= specs["credits"]
     state["research"] = {"id": tech, "started": state["turn"], "completesAt": state["turn"] + specs["turns"]}
@@ -786,25 +829,30 @@ def _operate_surface(state: dict, hub: dict) -> list[str]:
     spec = HAZARDS.get(hub["world"])
     severity = hazard["severity"] / 100 if hazard else 0.0
     shielded = _has_shield(hub, turn)
-    mitigation = (0.5 if hazard and hazard["prepared"] else 1.0) * (0.5 if "reinforce" in responses else 1.0) * (0.6 if shielded else 1.0)
+    mitigation = (0.75 if "thermal" in state["tech"] else 1) * (0.5 if hazard and hazard["prepared"] else 1.0) * (0.5 if "reinforce" in responses else 1.0) * (0.6 if shielded else 1.0)
     stowed = "stow_arrays" in responses
     sheltered = "shelter_crew" in responses
     power_save = "power_save" in responses or sheltered
 
     for tile_id, module in modules:
-        if module["type"] == "solar":
-            light = 0.3 if stowed else 1 - (spec["solarCut"] * severity if spec else 0)
-            nominal = surface.production(hub, hub["tiles"][tile_id], "solar")["outputs"]["energy"]
-            stock["energy"] = min(MAX_RESOURCE, stock["energy"] + ceil(nominal * light * _output_factor(module)))
+        if (module["type"] in ("solar", "reactor") or module["type"] == "command" and hub["world"] in ATMOSPHERIC_WORLDS) and _output_factor(module):
+            flow = surface.production(hub, hub["tiles"][tile_id], module["type"], state["tech"])
+            if any(stock[k] < amount for k, amount in flow["inputs"].items()):
+                notes.append(f"Sector {tile_id+1}: Fission Reactor idle — retain water and materials for power generation.")
+                continue
+            for resource, amount in flow["inputs"].items():
+                stock[resource] -= amount
+            light = (0.3 if stowed else 1 - (spec["solarCut"] * severity if spec else 0)) if module["type"] == "solar" else 1
+            stock["energy"] = min(MAX_RESOURCE, stock["energy"] + ceil(flow["outputs"]["energy"] * light * _output_factor(module)))
     science_gain = 0
     # Supply chain order is independent of the tiles on which facilities stand.
     priority = {"extractor": 0, "recycler": 1, "greenhouse": 2, "heater": 3, "habitat": 4, "shield": 5, "drill": 6, "laboratory": 7}
     for tile_id, module in sorted(modules, key=lambda item: (priority.get(item[1]["type"], 8), item[0])):
         kind = module["type"]
         factor = _output_factor(module)
-        if not factor or kind == "solar" or power_save and kind in ("laboratory", "drill", "extractor"):
+        if not factor or kind in ("solar", "reactor", "command") or power_save and kind in ("laboratory", "drill", "extractor"):
             continue
-        flow = surface.production(hub, hub["tiles"][tile_id], kind)
+        flow = surface.production(hub, hub["tiles"][tile_id], kind, state["tech"])
         if any(stock[k] < amount for k, amount in flow["inputs"].items()):
             notes.append(f"Sector {tile_id+1}: {BUILDINGS.get(kind, {}).get('name', kind)} idle — insufficient inputs.")
             continue
@@ -827,7 +875,7 @@ def _operate_surface(state: dict, hub: dict) -> list[str]:
         stock["heat"] = max(0, stock["heat"] - round(spec["heat"] * severity * mitigation))
         if hub["crew"] and not sheltered:
             hub["health"] = max(0, hub["health"] - round(spec["crew"] * severity * mitigation))
-        protections = [label for flag, label in ((hazard["prepared"], "prepared"), ("reinforce" in responses, "reinforced"), (shielded, "radiation shield"), (stowed, "arrays stowed"), (sheltered, "crew sheltered")) if flag]
+        protections = [label for flag, label in (("thermal" in state["tech"], "extreme-world protection"), (hazard["prepared"], "prepared"), ("reinforce" in responses, "reinforced"), (shielded, "radiation shield"), (stowed, "arrays stowed"), (sheltered, "crew sheltered")) if flag]
         notes.append(f"{spec['name']} (severity {hazard['severity']}) hit {hub['name']}" + (f"; protection: {', '.join(protections)}." if protections else " with no protection."))
 
     # Wear and automatic maintenance (1 material per two buildings).
@@ -845,7 +893,7 @@ def _operate_surface(state: dict, hub: dict) -> list[str]:
         crew_reduction = 1 if "closed_loop" in state["tech"] else 0
         ration = 1 if "ration" in responses else 0
         comfort = 1 if any(c["assigned"] == "survival" for c in hub["crew"]) else 0
-        requirements = {"oxygen": max(1, 3 - crew_reduction), "water": max(1, 3 - crew_reduction - ration), "food": max(1, 3 - comfort - ration), "heat": 3, "energy": 2}
+        requirements = {"oxygen": max(1, 3 - crew_reduction), "water": max(1, 3 - crew_reduction - ration), "food": max(1, 3 - comfort - ration - int("biosphere" in state["tech"])), "heat": 3, "energy": 2}
         short = 0
         for resource, amount in requirements.items():
             available = min(amount, stock[resource])
@@ -1042,7 +1090,9 @@ def _issue_forecasts(state: dict) -> None:
     for hub in state["hubs"]:
         if hub["kind"] != "surface" or not _active(hub) or _forecast_for(state, hub["id"], strike):
             continue
-        spec = HAZARDS[hub["world"]]
+        spec = HAZARDS.get(hub["world"])
+        if spec is None:
+            continue
         if _roll(state["seed"], hub["id"], strike, "hazard") >= spec["chance"]:
             continue
         severity = round(35 + 50 * _roll(state["seed"], hub["id"], strike, "severity") + spec["growth"] * strike)
@@ -1111,7 +1161,7 @@ def _goal_met(state: dict, goal: dict) -> bool:
     if kind == "science":
         return state["scienceTotal"] >= goal["value"]
     if kind == "surface_count":
-        return sum(h["world"] == goal["world"] and h["kind"] == "surface" for h in active) >= goal["value"]
+        return sum(h["world"] == goal["world"] and _has_surface(h) for h in active) >= goal["value"]
     if kind == "health":
         crewed = [h for h in active if h["world"] == goal["world"] and h["crew"]]
         return state["turn"] == goal["deadline"] and bool(crewed) and min(h["health"] for h in crewed) >= goal["value"]
@@ -1205,8 +1255,9 @@ def _advance(state: dict) -> dict:
             if hub:
                 center = expedition["tile"]
                 discovered = 0
-                for dy in (-1, 0, 1):
-                    for dx in (-1, 0, 1):
+                radius = expedition.get("radius", 1)
+                for dy in range(-radius, radius + 1):
+                    for dx in range(-radius, radius + 1):
                         x, y = center % MAP_SIZE + dx, center // MAP_SIZE + dy
                         if 0 <= x < MAP_SIZE and 0 <= y < MAP_SIZE and not hub["tiles"][y * MAP_SIZE + x]["revealed"]:
                             _reveal(state, hub, y * MAP_SIZE + x)

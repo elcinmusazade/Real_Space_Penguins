@@ -1,8 +1,10 @@
 """Campaign V3 flight planning: launch windows, rockets, delta-v and launch checks.
 
-Earth departures read ares/data/campaign_windows.json, which
+Earth departures to Mars, Venus, Mercury and Europa read
+ares/data/campaign_windows.json, which
 tools/build_campaign_windows.py computes offline from NASA GMAT's bundled DE421
-ephemeris and Atlas V 401 performance data. Departures from other hubs, the
+ephemeris and Atlas V 401 performance data. All outer-planet routes,
+floating platforms, departures from other hubs, the
 gravity-assist route, the larger rocket classes, capture orbits and landing
 delta-v are labelled game estimates.
 """
@@ -16,7 +18,8 @@ from functools import lru_cache
 from pathlib import Path
 
 from .campaign_data import (
-    ASSIST, BOILOFF_PER_TURN, CAMPAIGN_START, ENGINES, ESTIMATED_ARRIVAL_VINF, FUEL_UNIT_KG,
+    ASSIST, ATMOSPHERIC_WORLDS, BOILOFF_PER_TURN, CAMPAIGN_START, ENGINES, ESTIMATED_ARRIVAL_VINF, FUEL_UNIT_KG,
+    ESTIMATED_EARTH_C3, ESTIMATED_LIGHT_MINUTES,
     G0, HULLS, LAUNCH_VEHICLES, PAYLOADS, PHYSICS, ROUTES, TCM_DV_KMS, TRAJECTORIES, TURN_DAYS,
 )
 from .fault_data import FAULT_COMPUTERS
@@ -43,6 +46,8 @@ def _turn_row(world: str, turn: int) -> dict:
 def light_minutes(world: str, turn: int) -> float:
     if world == "earth":
         return 0.0
+    if world in ESTIMATED_LIGHT_MINUTES:
+        return ESTIMATED_LIGHT_MINUTES[world]
     return _turn_row(world, turn)["lightMinutes"]
 
 
@@ -57,8 +62,10 @@ def capacity_kg(vehicle_id: str, c3: float) -> float:
 
 
 def capture_dv(world: str, vinf: float) -> float:
-    """Impulsive capture at periapsis into the destination's orbit (plus any moon-tour allowance)."""
+    """Impulsive capture, or an explicit outer-platform game allowance."""
     p = PHYSICS[world]
+    if "captureEstimateKms" in p:
+        return p["captureEstimateKms"] * vinf / ESTIMATED_ARRIVAL_VINF[world]
     rp = p["radiusKm"] + p["periapsisKm"]
     ra = p["radiusKm"] + p["apoapsisKm"]
     a = (rp + ra) / 2
@@ -67,7 +74,9 @@ def capture_dv(world: str, vinf: float) -> float:
 
 def transfer(source_world: str, world: str, trajectory: str, turn: int) -> dict | None:
     """The transfer available this turn, or None when the option does not exist."""
-    if source_world == "earth":
+    if source_world == world == "earth":
+        return None
+    if source_world == "earth" and world in table()["destinations"]:
         row = _turn_row(world, turn)
         if trajectory == "assist":
             if world not in ASSIST:
@@ -89,13 +98,16 @@ def transfer(source_world: str, world: str, trajectory: str, turn: int) -> dict 
     base = ROUTES.get((source_world, world), ROUTES.get((world, source_world), 5)) if source_world != world else 1
     days = max(1, base + TRAJECTORIES[trajectory]["timeDelta"]) * TURN_DAYS
     vinf = ESTIMATED_ARRIVAL_VINF[world] * {"efficient": 0.85, "balanced": 1.0, "fast": 1.3}[trajectory]
-    return {"source": "estimate", "transferDays": days, "arrivalVinf": round(vinf, 2), "c3": None, "dlaDeg": None,
+    c3 = ESTIMATED_EARTH_C3[world] * {"efficient": .85, "balanced": 1.0, "fast": 1.1}[trajectory] if source_world == "earth" else None
+    return {"source": "estimate", "transferDays": days, "arrivalVinf": round(vinf, 2), "c3": c3, "dlaDeg": 0.0 if source_world == "earth" else None,
             "launch": turn_date(turn), "arrival": (date.fromisoformat(turn_date(turn)) + timedelta(days=days)).isoformat(),
             "arc": None, "goodWindow": True}
 
 
 def upcoming(world: str, turn: int, count: int = 12) -> list[dict]:
     """Best Earth departure in each of the next turns, for the window planner."""
+    if world not in table()["destinations"]:
+        return []
     out = []
     for t in range(turn, turn + count):
         row = _turn_row(world, t)
@@ -136,13 +148,13 @@ def assess(state: dict, design: dict, source_world: str, computer: str) -> dict:
     if objective == "orbital":
         need = TCM_DV_KMS + capture
     elif objective == "surface":
-        # Mars and Venus landers enter the atmosphere straight from the approach
+        # Earth, Mars and Venus landers enter the atmosphere straight from the approach
         # hyperbola; airless Mercury and Europa need a capture burn first.
         need = TCM_DV_KMS + landing + (0.0 if PHYSICS[world]["directEntry"] else capture)
     else:
         need = TCM_DV_KMS
-    if design["engine"] == "ion" and world == "europa":
-        need *= 1.3  # weak sunlight at Jupiter: the electric engine runs at reduced power (game estimate)
+    if design["engine"] == "ion" and world in ("europa", *ATMOSPHERIC_WORLDS):
+        need *= 1.3  # weak outer-system sunlight: the electric engine runs at reduced power (game estimate)
 
     checks = []
     vehicle = None
@@ -155,6 +167,8 @@ def assess(state: dict, design: dict, source_world: str, computer: str) -> dict:
         checks.append({"id": "mass", "label": "Launch mass", "ok": wet <= cap,
                        "detail": f"{wet:,.0f} kg on the pad vs {cap:,.0f} kg the {vehicle['name']} can send at C3 {leg['c3']:.1f} km²/s²"})
     label = {"surface": "Entry and landing" if PHYSICS[world]["directEntry"] else "Capture and landing", "orbital": "Orbit capture", "survey": "Course corrections"}[objective]
+    if world in ATMOSPHERIC_WORLDS and objective == "surface":
+        label = "Atmospheric platform deployment"
     checks.append({"id": "dv", "label": label, "ok": dv_have >= need,
                    "detail": f"Needs {need:.2f} km/s (arrival {vinf:.2f} km/s); propellant gives {dv_have:.2f} km/s" + (f" after {boil:.0%} boil-off" if boil else "")})
     failed = next((c for c in checks if not c["ok"]), None)

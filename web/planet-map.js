@@ -7,6 +7,10 @@ const surfaces = {
   mercury: {sky:'#0f1119', land:'#71717c', light:'#b3b4b8', dark:'#303541', accent:'#f4ca87', ridge:'#94919b', ice:'#bfc9cc'},
   europa: {sky:'#101923', land:'#6e919d', light:'#c9e4e2', dark:'#294d62', accent:'#bcf5ff', ridge:'#8cabb3', ice:'#c2e5e9'},
   earth: {sky:'#071b26', land:'#81925a', light:'#9ec1bb', dark:'#253c52', accent:'#c1fff3', ridge:'#6f9392', ice:'#d6efed'},
+  jupiter: {atmosphere:true,sky:'#281a21',land:'#d3ac87',light:'#f6dfbb',dark:'#654038',accent:'#ffd49e',ridge:'#a75d3f',ice:'#e8d6c2'},
+  saturn: {atmosphere:true,sky:'#25201e',land:'#cbbb86',light:'#f4e4b5',dark:'#66594d',accent:'#f5df98',ridge:'#ac925a',ice:'#ece2c5'},
+  uranus: {atmosphere:true,sky:'#102a32',land:'#9dcfcb',light:'#d9f1e4',dark:'#366575',accent:'#bbf6eb',ridge:'#63a5ac',ice:'#d4e8df'},
+  neptune: {atmosphere:true,sky:'#101b39',land:'#5788ba',light:'#c3ddf3',dark:'#223e6e',accent:'#a5d3ff',ridge:'#4879b7',ice:'#c5e0ef'},
 };
 
 const cameras = new Map();
@@ -41,7 +45,7 @@ function box(ctx,x,y,w,h,depth,top,side) {
 class PlanetMap {
   constructor(canvas, minimap, props) {
     this.canvas=canvas;this.minimap=minimap;this.props=props;this.ctx=canvas.getContext('2d');
-    this.size=props.size||32;this.palette=surfaces[props.world]||surfaces.mars;
+    this.size=props.size||96;this.palette=surfaces[props.world]||surfaces.mars;
     this.key=`${props.world}:${props.hubId||'unmapped'}`;
     this.cam=cameras.get(this.key)||{x:0,y:90,scale:1.25};cameras.set(this.key,this.cam);
     this.pointer=null;this.dead=false;this.lastFrame=0;this.hover=null;this.events=new AbortController();this.reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -66,8 +70,9 @@ class PlanetMap {
     return Math.abs(sx-pt.x)<=24*s&&sy>=pt.y-57*s&&sy<=pt.y+15*s;
   }
   centerOn(x=this.size/2-.5,y=this.size/2-.5){this.cam.x=-(x-y)*W/2*this.cam.scale;this.cam.y=-((x+y)-(this.size-1))*H/2*this.cam.scale+85;this.draw();this.drawMini();}
-  overview(){this.cam.scale=Math.max(.25,Math.min(.7,(this.width-80)/(this.size*W),(this.height-170)/(this.size*H)));this.centerOn();}
-  zoom(factor,sx=this.width/2,sy=this.height/2){const prior=this.cam.scale;this.cam.scale=Math.max(.25,Math.min(3.2,prior*factor));const z=this.cam.scale/prior;this.cam.x=sx-this.width/2+(this.cam.x-(sx-this.width/2))*z;this.cam.y=sy-this.height/2+(this.cam.y-(sy-this.height/2))*z;this.draw();this.drawMini();}
+  minScale(){return Math.max(.02,Math.min(.25,(this.width-80)/(this.size*W),(this.height-170)/(this.size*H)));}
+  overview(){this.cam.scale=this.minScale();this.centerOn();}
+  zoom(factor,sx=this.width/2,sy=this.height/2){const prior=this.cam.scale;this.cam.scale=Math.max(this.minScale(),Math.min(3.2,prior*factor));const z=this.cam.scale/prior;this.cam.x=sx-this.width/2+(this.cam.x-(sx-this.width/2))*z;this.cam.y=sy-this.height/2+(this.cam.y-(sy-this.height/2))*z;this.draw();this.drawMini();}
   // Shared corner heights keep adjacent diamonds joined into a continuous surface.
   cornerHeight(x,y){
     let sum=0,count=0;
@@ -97,7 +102,7 @@ class PlanetMap {
   }
   features(x,y){return hash(x,y,11);}
   biomeColor(tile){
-    if(tile?.biome==='settlement')return this.palette.land;
+    if(['settlement','platform'].includes(tile?.biome))return this.palette.land;
     return this.props.biomes?.[tile?.biome]?.color||this.palette.land;
   }
   draw(now=0){
@@ -111,23 +116,46 @@ class PlanetMap {
     sky.addColorStop(0,mixed(p.sky,p.land,.32));sky.addColorStop(1,'#050d18');c.fillStyle=sky;c.fillRect(0,0,w,h);
     for(let sum=0;sum<=2*(this.size-1);sum++){
       for(let x=Math.max(0,sum-this.size+1);x<=Math.min(this.size-1,sum);x++){
-        const y=sum-x,index=y*this.size+x,t=this.props.tiles?.[index]||{},pt=this.geometry(x,y);
-        if(pt.x<-W*s||pt.x>w+W*s||pt.y<-W*s||pt.y>h+W*s)continue;
+        const y=sum-x,q=this.coord(x,y);
+        // Cull before calculating elevation and geometry, including tall scenery.
+        if(q.x<-W*s||q.x>w+W*s||q.y<-W*s||q.y>h+100*s)continue;
+        const index=y*this.size+x,t=this.props.tiles?.[index]||{},pt=this.geometry(x,y);
         this.hits.push({...pt,index});
         const known=Boolean(t.revealed),biome=t.biome,water=['ocean','water'].includes(biome);
         let base=this.biomeColor(t);
         base=mixed(base,pt.shade>0?'#f2dfb8':'#142331',Math.min(.25,Math.abs(pt.shade)));
         base=mixed(base,'#263747',known?.03:.18);
-        if(x===this.size-1||y===this.size-1){
+        if(!p.atmosphere&&(x===this.size-1||y===this.size-1)){
           const side=pt.points.slice(1);polygon(c,[...side,[side[2][0],side[2][1]+20*s],[side[1][0],side[1][1]+20*s],[side[0][0],side[0][1]+20*s]],mixed(base,'#06121d',.55));
         }
         if(water)base=mixed(base,biome==='ocean'?'#164059':'#71c0bd',Math.min(.35,(this.size-x)/this.size*.4));
         polygon(c,pt.points,base,base,.65);
+        // Skip subpixel textures and scenery in the full-region overview.
+        if(s>=.45){
         // Slight tonal grain, no permanent grid over the natural landscape.
         c.save();c.beginPath();pt.points.forEach(([px,py],i)=>i?c.lineTo(px,py):c.moveTo(px,py));c.closePath();c.clip();
         for(let n=0;n<6;n++){
           const dx=(hash(x+n,y,3)-.5)*52*s,dy=(hash(x,y+n,7)-.5)*26*s;
           c.fillStyle=rgba('#fff0cc',.035+hash(x+n,y,13)*.05);c.fillRect(pt.x+dx,pt.y+dy,3*s,s*.6);
+        }
+        if(p.atmosphere){
+          // Drifting cloud ribbons stay inside fixed sectors so selecting never moves.
+          const storm=this.props.biomes?.[biome]?.blocked;
+          c.strokeStyle=rgba(p.light,storm?.20:.27);c.lineWidth=(storm?1.5:2.5)*s;
+          for(let n=-2;n<=2;n++){
+            const drift=Math.sin(time*.35+x*.19+y*.28+n)*5*s;
+            c.beginPath();c.moveTo(pt.x-36*s,pt.y+n*6*s+drift);
+            c.bezierCurveTo(pt.x-12*s,pt.y+(n*6-8)*s+drift,pt.x+7*s,pt.y+(n*6+9)*s+drift,pt.x+36*s,pt.y+n*6*s+drift);c.stroke();
+          }
+          if(storm){
+            c.strokeStyle=rgba(p.dark,.45);c.lineWidth=2*s;
+            for(let ring=0;ring<3;ring++){
+              c.beginPath();c.ellipse(pt.x,pt.y,(9+ring*6)*s,(3+ring*2)*s,-.2,time*.12+ring,time*.12+ring+Math.PI*1.6);c.stroke();
+            }
+          }else if(hash(x,y,43)>.55){
+            const puff=c.createRadialGradient(pt.x,pt.y-5*s,0,pt.x,pt.y,24*s);
+            puff.addColorStop(0,rgba(p.light,.16+.04*Math.sin(time*.4+x)));puff.addColorStop(1,rgba(p.light,0));c.fillStyle=puff;c.fillRect(pt.x-30*s,pt.y-20*s,60*s,40*s);
+          }
         }
         if(water){
           const glint=.13+.08*Math.sin(time*1.2+x*.4+y*.3);
@@ -156,10 +184,11 @@ class PlanetMap {
           const r=(7+hash(x,y,2)*10)*s;c.fillStyle=rgba('#142031',.15);c.strokeStyle=rgba('#ece3d6',.22);c.lineWidth=1.5*s;c.beginPath();c.ellipse(pt.x,pt.y,r,r*.46,0,0,Math.PI*2);c.fill();c.stroke();
         }
         c.restore();
-        if(!t.building&&!water)this.drawScenery(c,pt.x,pt.y,biome,x,y,s,time);
+        if(!p.atmosphere&&!t.building&&!water)this.drawScenery(c,pt.x,pt.y,biome,x,y,s,time);
         if(known&&t.terrain==='ice'&&!water){polygon(c,[[pt.x-7*s,pt.y],[pt.x,pt.y-5*s],[pt.x+7*s,pt.y],[pt.x,pt.y+3*s]],'#d5f6ef','#74c6de',s*.6);}
         if(known&&['science','salvage','hazard'].includes(t.terrain)){
           const colors={science:'#b8ede5',salvage:'#f2cc87',hazard:'#ff9476'};c.fillStyle=colors[t.terrain];c.font=`bold ${9*s}px monospace`;c.textAlign='center';c.fillText(t.terrain==='science'?'✧':t.terrain==='salvage'?'◇':'!',pt.x,pt.y+4*s);
+        }
         }
         if(t.building&&known){
           // Visible utility connections explain edge-connected construction.
@@ -175,10 +204,10 @@ class PlanetMap {
       }
     }
     // Slow atmospheric haze; the map stays still for accurate picking.
-    if(['earth','mars','venus'].includes(this.props.world)){
+    if(p.atmosphere||['earth','mars','venus'].includes(this.props.world)){
       for(let n=0;n<3;n++){
         const x=((n*.38+(time*.006)%1)*w)%(w*1.4)-w*.2,y=h*(.28+n*.24);
-        const cloud=c.createRadialGradient(x,y,10,x,y,w*.29);cloud.addColorStop(0,this.props.world==='earth'?'#e4f0dd09':'#dab08c08');cloud.addColorStop(1,'#ffffff00');c.fillStyle=cloud;c.fillRect(0,0,w,h);
+        const cloud=c.createRadialGradient(x,y,10,x,y,w*.29);cloud.addColorStop(0,p.atmosphere?rgba(p.light,.07):this.props.world==='earth'?'#e4f0dd09':'#dab08c08');cloud.addColorStop(1,'#ffffff00');c.fillStyle=cloud;c.fillRect(0,0,w,h);
       }
     }
     const vignette=c.createLinearGradient(0,0,0,h);vignette.addColorStop(0,'#06101b60');vignette.addColorStop(.4,'#07111a00');vignette.addColorStop(1,'#02050a60');c.fillStyle=vignette;c.fillRect(0,0,w,h);
@@ -210,6 +239,14 @@ class PlanetMap {
   drawBuilding(c,x,y,b,s,p,now){
     const t=b.type,at=now/550; c.save();c.translate(x,y);c.scale(s,s);
     c.fillStyle='#05151cae';c.beginPath();c.ellipse(1,7,22,9,0,0,Math.PI*2);c.fill();
+    if(p.atmosphere){
+      // Buoyant pods and a wide deck distinguish floating facilities from land bases.
+      for(const side of [-1,1]){
+        c.fillStyle='#92b4c5';c.strokeStyle='#d1e8ed';c.lineWidth=.8;c.beginPath();c.ellipse(side*23,5,7,12,-side*.4,0,Math.PI*2);c.fill();c.stroke();
+        c.strokeStyle='#5f879a';c.beginPath();c.moveTo(side*22,-2);c.lineTo(side*11,-9);c.stroke();
+      }
+      box(c,0,0,53,27,5,'#adc8ce','#456575');
+    }
     box(c,0,2,35,18,7,'#8497a1','#394953');
     if(t==='solar'){for(let side of [-1,1]){polygon(c,[[side*8,-11],[side*27,-18],[side*34,-9],[side*14,-2]],'#265a78','#18354f',1);for(let n=0;n<3;n++){c.strokeStyle='#75b7d282';c.beginPath();c.moveTo(side*(12+n*6),-13-n*2);c.lineTo(side*(19+n*5),-5-n*.9);c.stroke();}}box(c,0,-6,10,9,5,'#aec9d3','#576875');}
     else if(t==='shield'){c.fillStyle='#7de8ed30';c.strokeStyle='#bffcffb9';c.lineWidth=1.4;c.beginPath();c.ellipse(0,-6,21,19,0,Math.PI,Math.PI*2);c.lineTo(21,-6);c.ellipse(0,-6,21,7,0,0,Math.PI);c.fill();c.stroke();}
@@ -218,6 +255,7 @@ class PlanetMap {
     else if(t==='laboratory'){box(c,0,-10,27,17,18,'#aec1cd','#657681');c.fillStyle='#82e5f9';c.fillRect(-8,-27,16,6);}
     else if(t==='extractor'||t==='drill'){box(c,0,-12,22,14,19,'#b9b7aa','#7f7868');c.strokeStyle='#ffcc85';c.lineWidth=3;c.beginPath();c.moveTo(7,-23);c.lineTo(13,-37);c.stroke();}
     else if(t==='recycler'){box(c,-7,-9,12,12,22,'#bad6d8','#668a9e');box(c,8,-5,12,12,22,'#c7ddd2','#547e78');c.strokeStyle='#9ee9d7';c.lineWidth=2;c.beginPath();c.moveTo(-7,-21);c.lineTo(8,-17);c.stroke();}
+    else if(t==='reactor'){box(c,0,-15,32,24,25,'#c6cec4','#617b7c');c.strokeStyle='#f1c28a';c.lineWidth=3;c.beginPath();c.ellipse(0,-29,10,6,0,0,Math.PI*2);c.stroke();c.fillStyle='#8addcb';c.fillRect(-5,-24,10,5);}
     else if(t==='heater'){box(c,0,-14,22,14,20,'#bd9991','#715c59');c.fillStyle='#ffb36b';c.fillRect(-7,-29,14,7);}
     else box(c,0,-12,24,16,15,'#b7cad0','#657d8b');
     if(b.onlineFrom>this.props.turn){c.globalAlpha=.65;c.fillStyle='#ffe5aa';c.font='bold 9px monospace';c.textAlign='center';c.fillText('BUILDING',0,-46);}
@@ -227,6 +265,12 @@ class PlanetMap {
   drawMini(){if(!this.minimap)return;const canvas=this.minimap,rect=canvas.getBoundingClientRect();if(rect.width<1)return;let dpr=Math.min(2,devicePixelRatio||1);canvas.width=rect.width*dpr;canvas.height=rect.height*dpr;const c=canvas.getContext('2d');c.scale(dpr,dpr);const width=rect.width,height=rect.height;
     c.fillStyle='#091823';c.fillRect(0,0,width,height);const tw=width/this.size,th=height/this.size;
     for(let y=0;y<this.size;y++)for(let x=0;x<this.size;x++){const tile=this.props.tiles?.[y*this.size+x];c.fillStyle=mixed(this.biomeColor(tile),'#102335',tile?.revealed?.02:.22);c.fillRect(x*tw,y*th,Math.ceil(tw+.5),Math.ceil(th+.5));if(tile?.building){c.fillStyle='#ddfaff';c.fillRect(x*tw,y*th,Math.max(2,tw),Math.max(2,th));}}
+    c.save();c.beginPath();c.rect(0,0,width,height);c.clip();
+    const viewport=[[0,0],[this.width,0],[this.width,this.height],[0,this.height]].map(([sx,sy])=>{
+      const dx=(sx-this.width/2-this.cam.x)/(W/2*this.cam.scale),dy=(sy-this.height/2-this.cam.y)/(H/2*this.cam.scale)+this.size-1;
+      return [((dy+dx)/2+.5)*tw,((dy-dx)/2+.5)*th];
+    });
+    polygon(c,viewport,'#e4f6de14','#f3d9a8bb',1);c.restore();
     const x=this.props.selection%this.size,y=Math.floor(this.props.selection/this.size);if(Number.isFinite(x)&&Number.isFinite(y)){c.strokeStyle='#ffffff';c.lineWidth=1.5;c.strokeRect(x*tw-2,y*th-2,tw+4,th+4);}c.strokeStyle='#74c3d3aa';c.strokeRect(.5,.5,width-1,height-1);
   }
 }

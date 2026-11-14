@@ -4,6 +4,7 @@ from copy import deepcopy
 import unittest
 
 from ares import campaign
+from campaign_fixtures import established_campaign
 from ares.campaign_data import GOALS, MAP_SIZE, WORLDS
 
 CORE = MAP_SIZE * (MAP_SIZE // 2) + MAP_SIZE // 2
@@ -55,19 +56,58 @@ def at_turn(state, turn):
 
 class CampaignTests(unittest.TestCase):
     def setUp(self):
-        self.state = campaign.create_campaign("TEST-DEEP-SPACE")
+        self.state = established_campaign("TEST-DEEP-SPACE")
 
-    def test_initial_hubs_and_free_orders(self):
-        self.assertEqual(self.state["version"], 3)
-        self.assertEqual(len(self.state["hubs"]), 2)
-        self.assertEqual(self.state["hubs"][0]["world"], "earth")
-        self.assertEqual(self.state["hubs"][1]["world"], "mars")
-        self.assertNotIn("ap", self.state)
-        s = act(self.state, "explore", hub="H2", tile=CORE - 2)
-        s = act(s, "explore", hub="H2", tile=CORE + 2)
+    def test_initial_mars_headquarters_and_free_orders(self):
+        state = campaign.create_campaign("MARS-START")
+        self.assertEqual(state["version"], 3)
+        self.assertEqual(len(state["hubs"]), 1)
+        self.assertEqual(state["hubs"][0]["world"], "mars")
+        self.assertEqual(state["hubs"][0]["kind"], "control")
+        self.assertEqual(state["hubs"][0]["tiles"][CORE]["building"]["type"], "command")
+        self.assertEqual(state["visitedWorlds"], [])
+        self.assertEqual(state["nextId"], 2)
+        self.assertEqual(state["missions"], [])
+        self.assertNotIn("ap", state)
+        self.assertTrue(campaign.validate(state)["ok"])
+        s = act(state, "explore", hub="H1", tile=CORE - 2)
+        s = act(s, "explore", hub="H1", tile=CORE + 2)
         self.assertEqual(s["turn"], 1)
-        self.assertEqual(s["hubs"][1]["discovered"], 2)
-        self.assertFalse(self.state["hubs"][1]["tiles"][CORE - 2]["revealed"])
+        self.assertEqual(s["hubs"][0]["discovered"], 2)
+        self.assertFalse(state["hubs"][0]["tiles"][CORE - 2]["revealed"])
+        self.assertFalse(campaign.execute(state,"explore",{"hub":"H2","tile":CORE-2})["ok"])
+        self.assertFalse(campaign.execute(state,"shipment",{"source":"H1","target":"H2","resource":"materials","amount":20})["ok"])
+
+    def test_earth_is_established_only_after_the_first_lander_arrives(self):
+        state = campaign.create_campaign("MARS-TO-EARTH")
+        state = advance(state, 1)
+        state = act(state, "setSoftware", **GOOD_SOFTWARE)
+        mission = design(destination="earth", site="Cape Canaveral", payload=["survey","lab"])
+        quote = campaign.mission_quote(state, mission)
+        self.assertTrue(quote["ok"])
+        self.assertTrue(quote["affordable"])
+        self.assertEqual(quote["outcome"], "go")
+        state = act(state,"launch",design=mission)
+        self.assertEqual(len(state["hubs"]),1)
+        self.assertNotIn("earth",state["visitedWorlds"])
+        state = advance(state, quote["turns"]-1)
+        self.assertEqual(len(state["hubs"]),1)
+        state = advance(state,1)
+        self.assertEqual(state["missions"][0]["status"], "complete")
+        earth = next(h for h in state["hubs"] if h["world"] == "earth")
+        self.assertEqual(earth["site"],"Cape Canaveral")
+        self.assertEqual(earth["kind"],"surface")
+        self.assertIn("earth",state["visitedWorlds"])
+        state = act(state,"explore",hub=earth["id"],tile=CORE-2)
+        self.assertTrue(next(h for h in state["hubs"] if h["id"] == earth["id"])["tiles"][CORE-2]["revealed"])
+
+    def test_existing_mars_save_retains_earned_progress(self):
+        state = advance(self.state,2)
+        before = deepcopy(state)
+        result = campaign.validate(state)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["state"],before)
+        self.assertEqual(state,before)
 
     def test_surveys_take_time_and_reveal_when_arriving(self):
         distant = CORE + MAP_SIZE * 4 + 4
@@ -407,15 +447,15 @@ class CampaignTests(unittest.TestCase):
         s = advance(self.state, 12)
         for hub in s["hubs"]:
             self.assertTrue(all(0 <= v <= 400 for v in hub["stocks"].values()))
-        self.assertEqual(set(WORLDS), {"earth", "mars", "venus", "mercury", "europa"})
+        self.assertEqual(set(WORLDS), {"earth", "mars", "venus", "mercury", "europa", "jupiter", "saturn", "uranus", "neptune"})
 
     def test_large_independent_planet_maps(self):
-        self.assertEqual(len(self.state["hubs"][1]["tiles"]), 1024)
+        self.assertEqual(len(self.state["hubs"][1]["tiles"]), MAP_SIZE * MAP_SIZE)
         self.assertTrue(self.state["hubs"][1]["tiles"][CORE]["revealed"])
         self.assertFalse(self.state["hubs"][1]["tiles"][0]["revealed"])
         for world in ("mars", "venus", "mercury", "europa"):
             outpost = campaign._hub("HX", world, "surface", WORLDS[world]["sites"][0], payload=["survey"])
-            self.assertEqual(len(outpost["tiles"]), 1024)
+            self.assertEqual(len(outpost["tiles"]), MAP_SIZE * MAP_SIZE)
             self.assertEqual(outpost["tiles"][CORE]["building"]["type"], "habitat" if world == "mars" else "command")
 
     def test_legacy_five_by_five_saves_expand_without_losing_buildings(self):
@@ -425,7 +465,7 @@ class CampaignTests(unittest.TestCase):
         result = campaign.validate(legacy)
         self.assertTrue(result["ok"])
         restored = result["state"]["hubs"][1]["tiles"]
-        self.assertEqual(len(restored), 1024)
+        self.assertEqual(len(restored), MAP_SIZE * MAP_SIZE)
         self.assertEqual(restored[CORE]["building"]["type"], "habitat")
         self.assertEqual(len(legacy["hubs"][1]["tiles"]), 25)
         corrupt = deepcopy(legacy)

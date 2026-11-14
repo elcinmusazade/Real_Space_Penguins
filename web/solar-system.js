@@ -1,6 +1,5 @@
 /** Solar-system navigation only. Positions and sizes are a schematic, not ephemeris data. */
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const playable = ['mercury','venus','earth','mars','europa'];
 const center={x:550,y:310},orbitTilt=-14,orbitFlattening=.48;
 const bodies = {
   sun: {name:'Sun',kind:'Our star',description:'The center of your mission network. Select a world to explore its surface, manage a hub, or plan your next departure.',r:103,color:'#ffaf38'},
@@ -8,10 +7,10 @@ const bodies = {
   venus: {name:'Venus',orbit:175,period:38,phase:1.2,r:23,color:'#e8bb75'},
   earth: {name:'Earth',orbit:230,period:52,phase:-.35,r:26,color:'#61b5d1'},
   mars: {name:'Mars',orbit:280,period:68,phase:2.1,r:19,color:'#d58a63'},
-  jupiter: {name:'Jupiter',orbit:335,period:92,phase:-2.6,r:51,color:'#cfa581',kind:'Gas giant',description:'Europa belongs to the Jupiter system. Select the icy moon to plan an expedition or manage its outposts.'},
-  saturn: {name:'Saturn',orbit:385,period:116,phase:.5,r:41,color:'#d5c68d',kind:'Gas giant',description:'A ringed landmark in the outer solar system. Surface operations are not available here in this campaign.'},
-  uranus: {name:'Uranus',orbit:435,period:142,phase:-1.4,r:29,color:'#a5d7dc',kind:'Ice giant',description:'A distant landmark beyond Saturn. Surface operations are not available here in this campaign.'},
-  neptune: {name:'Neptune',orbit:485,period:168,phase:2.8,r:28,color:'#6598d9',kind:'Ice giant',description:'The outermost planet in this navigation chart. Surface operations are not available here in this campaign.'},
+  jupiter: {name:'Jupiter',orbit:335,period:92,phase:-2.6,r:51,color:'#cfa581'},
+  saturn: {name:'Saturn',orbit:385,period:116,phase:.5,r:41,color:'#d5c68d'},
+  uranus: {name:'Uranus',orbit:435,period:142,phase:-1.4,r:29,color:'#a5d7dc'},
+  neptune: {name:'Neptune',orbit:485,period:168,phase:2.8,r:28,color:'#6598d9'},
   europa: {name:'Europa',kind:'Moon of Jupiter',r:12,color:'#d9d4b8'},
 };
 const bodyScale=id=>id==='sun'?.5:.8;
@@ -77,9 +76,10 @@ function routeArt(f,state,positions) {
 
 export function solarSystemView({catalog,state,selected,showRoutes,date}) {
   const positions=solarPositions();
-  const b=bodies[selected]||bodies.earth,w=catalog.worlds[selected];
+  const b=bodies[selected]||bodies.mars,w=catalog.worlds[selected];
   const hubs=hubsAt(state,selected), flights=traffic(state), localFlights=flights.filter(f=>f.from===selected||f.to===selected);
-  const active=hubs.filter(h=>h.status==='active').length;
+  const active=hubs.filter(h=>h.status==='active').length,atmosphere=w?.mapLayer==='atmosphere';
+  const playable=Object.keys(bodies).filter(id=>catalog.worlds[id]);
   return `<div class="solar-scrim" data-action="solar-dismiss"><section id="solar-system-dialog" class="solar-dialog" role="dialog" aria-modal="true" aria-labelledby="solar-heading">
     <header class="solar-header"><div><span class="solar-eyebrow">MISSION NETWORK / NAVIGATION</span><h2 id="solar-heading">Solar system<span>.</span></h2></div><div class="solar-summary"><span>TURN ${String(state.turn).padStart(2,'0')} · ${esc(date)}</span><b>${state.hubs.filter(h=>h.status==='active').length} ACTIVE HUBS <i>/</i> ${flights.length} IN TRANSIT</b></div><button class="solar-close" data-action="solar-close" aria-label="Close solar system navigator">✕</button></header>
     <div class="solar-layout"><div class="solar-map-area"><div class="solar-scene-label"><span class="solar-live-dot"></span> SOL / EXPLORATION NETWORK <small class="solar-motion-hint">HOVER TO HOLD · SELECT A WORLD</small></div>
@@ -99,10 +99,10 @@ export function solarSystemView({catalog,state,selected,showRoutes,date}) {
       <div class="solar-map-tools"><span>DRAG TO PAN · SCROLL TO ZOOM<small>SCHEMATIC · NOT TO SCALE</small></span><div><button data-action="solar-zoom-out" aria-label="Zoom out solar system">−</button><output class="solar-zoom-label" aria-label="Solar system zoom">100%</output><button data-action="solar-zoom-in" aria-label="Zoom in solar system">+</button><button data-action="solar-fit" aria-label="Fit solar system">⌖</button><button class="solar-route-toggle" data-action="solar-routes" aria-pressed="${showRoutes}" title="Show or hide active mission and cargo routes">ROUTES</button><button class="solar-motion-toggle" data-action="solar-motion" aria-label="Pause solar system animation">Ⅱ PAUSE</button></div></div>
     </div>
     <aside class="solar-detail" aria-label="Selected world details"><div class="solar-detail-kicker">${w?'DESTINATION / '+(selected==='europa'?'JOVIAN SYSTEM':'SOL SYSTEM'):'SYSTEM LANDMARK'}</div><h3>${esc(b.name)}</h3><p class="solar-kind">${esc(w?.environment||b.kind)}</p><p class="solar-description">${esc(w?.description||b.description)}</p>
-      ${w?`<div class="solar-world-stats"><div><b>${active}<span> / ${hubs.length}</span></b><small>HUBS ACTIVE</small></div><div><b>${localFlights.length}</b><small>IN TRANSIT</small></div></div><button class="solar-primary" data-action="solar-map" data-id="${selected}">${hubs.some(h=>h.tiles.length)?'OPEN SURFACE MAP':'VIEW SURFACE'} <span>↗</span></button>${selected==='earth'?`<button class="solar-secondary" data-action="solar-operations" data-id="${esc(hubs[0]?.id||'')}">MISSION CONTROL →</button>`:`<button class="solar-secondary" data-action="solar-plan" data-id="${selected}">PLAN LANDING MISSION →</button>`}
-      <div class="solar-section-label">YOUR HUBS <span>${hubs.length}</span></div><div class="solar-hub-list">${hubs.length?hubs.map(h=>`<button data-action="solar-hub" data-id="${esc(h.id)}"><span class="solar-hub-symbol">${h.kind==='orbital'?'◇':'⌑'}</span><span><b>${esc(h.site)}</b><small>${esc(h.status.toUpperCase())} · ${h.kind==='orbital'?'ORBITAL / SUPPLIES':'SURFACE / MAP'}</small></span><span>↗</span></button>`).join(''):'<p class="solar-empty">No outpost here yet. Plan a landing to establish your first hub.</p>'}</div>
+      ${w?`<div class="solar-world-stats"><div><b>${active}<span> / ${hubs.length}</span></b><small>HUBS ACTIVE</small></div><div><b>${localFlights.length}</b><small>IN TRANSIT</small></div></div><button class="solar-primary" data-action="solar-map" data-id="${selected}">${atmosphere?(hubs.some(h=>h.tiles.length)?'OPEN CLOUD MAP':'PREVIEW CLOUD MAP'):(hubs.some(h=>h.tiles.length)?'OPEN SURFACE MAP':'PREVIEW SURFACE')} <span>↗</span></button>${hubs.some(h=>h.kind==='control')?`<button class="solar-secondary" data-action="solar-operations" data-id="${esc(hubs.find(h=>h.kind==='control').id)}">MISSION CONTROL →</button>`:`<button class="solar-secondary" data-action="solar-plan" data-id="${selected}">${atmosphere?'PLAN PLATFORM MISSION':'PLAN LANDING MISSION'} →</button>`}
+      <div class="solar-section-label">YOUR HUBS <span>${hubs.length}</span></div><div class="solar-hub-list">${hubs.length?hubs.map(h=>`<button data-action="solar-hub" data-id="${esc(h.id)}"><span class="solar-hub-symbol">${h.kind==='orbital'?'◇':'⌑'}</span><span><b>${esc(h.site)}</b><small>${esc(h.status.toUpperCase())} · ${h.kind==='orbital'?'ORBITAL / SUPPLIES':atmosphere?'PLATFORM / MAP':'SURFACE / MAP'}</small></span><span>↗</span></button>`).join(''):`<p class="solar-empty">No outpost here yet. ${atmosphere?'Deploy a robotic platform':'Plan a landing'} to establish your first hub.</p>`}</div>
       <div class="solar-section-label">TRAFFIC <span>${localFlights.length}</span></div>${localFlights.length?localFlights.map(f=>`<div class="solar-traffic-item"><b>${esc(f.id)} · ${f.label}</b><span>${esc(bodies[f.from]?.name||'Hub')} → ${esc(bodies[f.to]?.name||'Hub')}</span><small>ARRIVES IN ${Math.max(0,f.arrivesAt-state.turn)} TURNS</small></div>`).join(''):'<p class="solar-empty">No active missions or cargo at this world.</p>'}`:
-      selected==='jupiter'?'<button class="solar-primary" data-action="solar-select" data-id="europa">EXPLORE EUROPA <span>↗</span></button>':selected==='sun'?'<button class="solar-primary" data-action="solar-select" data-id="earth">GO TO EARTH HQ <span>↗</span></button>':'<div class="solar-landmark-note">CHARTED LANDMARK<span>Choose a campaign destination below.</span></div>'}
+      selected==='sun'?'<button class="solar-primary" data-action="solar-select" data-id="mars">GO TO MARS HOME <span>↗</span></button>':'<div class="solar-landmark-note">CHARTED LANDMARK<span>Choose a campaign destination below.</span></div>'}
     </aside></div>
     <footer class="solar-footer"><span>DESTINATIONS <small>${state.milestone?'PATHFINDER COMPLETE':'YOUR NEXT FRONTIER'}</small></span><nav aria-label="Campaign destinations">${playable.map(id=>`<button class="${selected===id?'is-selected':''}" data-action="solar-select" data-id="${id}" aria-pressed="${selected===id}"><span class="mini-planet mini-${id}" aria-hidden="true"></span>${bodies[id].name}${hubsAt(state,id).length?'<i aria-label="Has a hub"></i>':''}</button>`).join('')}</nav></footer>
   </section></div>`;

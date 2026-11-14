@@ -39,3 +39,10 @@
 @media(min-width:901px) and (max-width:1250px){.solar-map-tools{align-items:flex-start;flex-direction:column;gap:10px}.solar-map-tools>span{max-width:none}.solar-map-tools small{display:inline;margin-left:10px}.solar-viewport{bottom:90px}}
 @media(max-width:650px){.solar-map-tools>div{gap:4px}.solar-map-tools button{min-width:34px}.solar-map-tools .solar-route-toggle{padding:0 7px;margin-left:0!important}.solar-map-tools .solar-motion-toggle{padding:0 6px;min-width:62px}.solar-zoom-label{min-width:33px}}
 @media(prefers-reduced-motion:reduce){.solar-map-area *,.solar-map-area::before{animation-play-state:paused!important}}
+/* All eight planets and Europa remain reachable without squeezing the chart. */
+.solar-footer nav{min-width:0;overflow-x:auto;justify-content:flex-start;scrollbar-width:thin}
+.solar-footer button{flex-shrink:0}
+.mini-jupiter{background:radial-gradient(circle at 30% 25%,#efd7b8,#bb845e 58%,#49352e)}
+.mini-saturn{background:radial-gradient(circle at 30% 25%,#fff1bf,#bba36c 58%,#514537)}
+.mini-uranus{background:radial-gradient(circle at 30% 25%,#e1ffff,#81b9c3 58%,#31566d)}
+.mini-neptune{background:radial-gradient(circle at 30% 25%,#b0d3ff,#487ab8 58%,#1d315c)}

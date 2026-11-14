@@ -1,5 +1,7 @@
 """Automated playthroughs: a careful programme should thrive where a careless one fails.
 
+The scenario starts with an established Mars colony to exercise survival.
+Earth-only startup and first landing are tested separately.
 These are balance guards, not exact-number tests. If a rule change breaks one,
 re-check that good play is still rewarded and careless play still costs.
 """
@@ -7,6 +9,7 @@ re-check that good play is still rewarded and careless play still costs.
 import unittest
 
 from ares import campaign
+from campaign_fixtures import established_campaign
 from ares.campaign_data import MAP_SIZE
 
 CORE = MAP_SIZE * (MAP_SIZE // 2) + MAP_SIZE // 2
@@ -41,7 +44,7 @@ def try_act(state, action, **args):
 
 
 def careful(seed):
-    s = campaign.create_campaign(seed)
+    s = established_campaign(seed)
     s = try_act(s, "setSoftware", **GOOD_SOFTWARE)
     s = try_act(s, "setOrders", rules=GOOD_ORDERS)
     for tile in (CORE - 2, CORE + 2, CORE - 2 * MAP_SIZE, CORE + 2 * MAP_SIZE, CORE + MAP_SIZE + 2):
@@ -73,7 +76,7 @@ def careful(seed):
                 if len(s["missions"]) > before:
                     wanted.remove((turn, mission))
         if not s["research"]:
-            for tech in ("robotics", "autonomy", "closed_loop"):
+            for tech in ("surveying", "autonomy", "closed_loop"):
                 if tech not in s["tech"]:
                     s = try_act(s, "research", tech=tech)
                     break
@@ -82,7 +85,7 @@ def careful(seed):
 
 
 def careless(seed):
-    s = campaign.create_campaign(seed)
+    s = established_campaign(seed)
     s = try_act(s, "launch", design=plan("mars", "surface", "Jezero Rim", ["rover", "lab"], "lander", 1500), confirm=True)
     s = try_act(s, "setOrders", rules=[])
     for _ in range(TURNS):

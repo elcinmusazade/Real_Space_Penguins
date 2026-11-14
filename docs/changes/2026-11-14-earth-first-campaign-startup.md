@@ -1,0 +1,8 @@
+# Earth-first campaign startup — 2026-11-14
+
+- **Request:** Start on Earth without a free Mars hub or an automatically opened mission page.
+- **Engine:** `ares/campaign.py` creates Earth HQ only, clears initial off-world visits, starts IDs at 2 and updates the opening log. Mars hubs are created by arriving missions. Existing saves retain their hubs and progress.
+- **UI:** `web/campaign.js` opens the Earth map on load/reset, removes automatic intro/planner opening and initial mission quote requests, keeps planet selection on the map, and explains the second-hub requirement in Logistics. Reset explicitly says “Start on Earth.” AURA and mission planning remain available by choice. `web/program-ui.js` teaches Earth scanning without assuming a Mars hub exists.
+- **Tests:** Added actual fresh/resumed/reset controller checks, preview/planning/logistics checks, Earth-only engine assertions and a first-Mars-landing playthrough. Existing Mars survival and legacy-map tests use an explicit established-colony fixture; HTTP tests cover the new starting state.
+- **Results:** `python3 -B -m unittest discover -s tests -v`: 100 run, OK, 1 optional GMAT skip (55.330 seconds). JavaScript syntax and `git diff --check` pass. Actual browser verification remains pending under the earlier preview denial.
+- **Docs/run:** Updated AGENTS, README, PROJECT, ARCHITECTURE, DECISIONS (D-017) and STATUS. Restart `python3 -m ares.server`, refresh, then choose ↻ New campaign → Start on Earth to replace an old saved run with the new setup. No user save was reset during this work; no commit or deployment performed.

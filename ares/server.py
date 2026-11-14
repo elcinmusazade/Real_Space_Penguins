@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__
-from . import engine, campaign, faults
+from . import engine, campaign, faults, research
 from .campaign_data import campaign_catalog
 
 
@@ -24,6 +24,9 @@ STATIC_TYPES = {
     "index.html": "text/html; charset=utf-8",
     "classic.html": "text/html; charset=utf-8",
     "app.js": "text/javascript; charset=utf-8",
+    "tech-tree.js": "text/javascript; charset=utf-8",
+    "tech-tree.css": "text/css; charset=utf-8",
+    "campaign-save.js": "text/javascript; charset=utf-8",
     "campaign.js": "text/javascript; charset=utf-8",
     "campaign.css": "text/css; charset=utf-8",
     "map-game.css": "text/css; charset=utf-8",
@@ -42,6 +45,7 @@ STATIC_TYPES = {
     "styles.css": "text/css; charset=utf-8",
 }
 MAX_BODY = 4_000_000
+MAX_CAMPAIGN_BODY = 96_000_000  # Multi-hub 96×96 saves; Classic keeps its smaller limit.
 
 
 class GameHandler(BaseHTTPRequestHandler):
@@ -75,7 +79,7 @@ class GameHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test", "/api/campaign/inspect"):
+        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test", "/api/campaign/inspect", "/api/campaign/research"):
             self._json({"ok": False, "error": "Unknown endpoint."}, HTTPStatus.NOT_FOUND)
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -86,7 +90,7 @@ class GameHandler(BaseHTTPRequestHandler):
         except (ValueError, TypeError):
             self._json({"ok": False, "error": "A request length is required."}, HTTPStatus.LENGTH_REQUIRED)
             return
-        if not 0 < size <= MAX_BODY:
+        if not 0 < size <= (MAX_CAMPAIGN_BODY if path.startswith("/api/campaign/") else MAX_BODY):
             self._json({"ok": False, "error": "Request too large or empty."}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             return
         try:
@@ -116,6 +120,9 @@ class GameHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/campaign/validate":
                 self._json(checked)
+                return
+            if path == "/api/campaign/research":
+                self._json(research.inspect(checked["state"]))
                 return
             if path == "/api/campaign/inspect":
                 self._json(campaign.inspect_surface(checked["state"], payload.get("hub"), payload.get("tile")))

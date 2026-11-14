@@ -15,8 +15,8 @@ const at = (track, t) => {
   return [lerp(track[i][0], track[i + 1][0], k), lerp(track[i][1], track[i + 1][1], k)];
 };
 const path = track => track.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(3)},${(-p[1]).toFixed(3)}`).join('');
-const BODY = {mars: 'mars', venus: 'venus', mercury: 'mercury', europa: 'jupiter'};
-const COLOR = {earth: '#5b9bd5', mars: '#d9734e', venus: '#d8b071', mercury: '#a9a4a0', jupiter: '#d2a77c'};
+const BODY = {earth: 'earth', jupiter: 'jupiter', saturn: 'saturn', uranus: 'uranus', neptune: 'neptune', mars: 'mars', venus: 'venus', mercury: 'mercury', europa: 'jupiter'};
+const COLOR = {earth: '#5b9bd5', mars: '#d9734e', venus: '#d8b071', mercury: '#a9a4a0', jupiter: '#d2a77c', saturn: '#d6c18b', uranus: '#9fd7d8', neptune: '#6a98d2'};
 
 function wait(ms) { return new Promise(resolve => setTimeout(resolve, reduced() ? Math.min(ms, 100) : ms)); }
 function animate(duration, step) {
@@ -142,7 +142,7 @@ export async function playLaunch({mission, catalog, tracks}) {
   const card = titles[outcome]
     ? `<div class="eyebrow">MISSION FAILURE</div><h2>${titles[outcome]}</h2>${missionReport(catalog, mission)}`
     : `<div class="eyebrow">LAUNCH SUCCESSFUL</div><h2>${esc(mission.id)} is on its way to ${esc(catalog.worlds[mission.destination].name)}.</h2>
-       <p>Arrival on turn ${mission.arrivesAt} (${esc(mission.transfer?.arrival || '')}). ${mission.transfer?.source === 'assist' ? esc(mission.transfer.label) + '. The arc shows only the first leg.' : mission.transfer?.source === 'estimate' ? 'Off-Earth departure: game-estimate trajectory.' : 'Trajectory from NASA GMAT DE421 data.'} The flight software you loaded will face the approach on its own.</p>`;
+       <p>Arrival on turn ${mission.arrivesAt} (${esc(mission.transfer?.arrival || '')}). ${mission.transfer?.source === 'assist' ? esc(mission.transfer.label) + '. The arc shows only the first leg.' : mission.transfer?.source === 'estimate' ? 'Game-estimate trajectory; no GMAT transfer data for this route.' : 'Trajectory from NASA GMAT DE421 data.'} The flight software you loaded will face the approach on its own.</p>`;
   await finish(overlay, card);
 }
 

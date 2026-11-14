@@ -85,12 +85,13 @@ export function programView({catalog, state, date}) {
 
 /** First-mission guide: steps derived from state; purely presentational. */
 export function guideSteps(state, defaults) {
+  const home = state.hubs.find(h => h.world === 'mars' && h.tiles.length) || state.hubs.find(h => h.kind === 'control');
   const softwareChanged = JSON.stringify(state.software) !== JSON.stringify(defaults.software);
   return [
-    {done: state.turn > 1 || state.missions.length > 0 || state.hubs[1].tiles.filter(t => t.revealed).length > 9, text: 'Select an unsurveyed sector near Arcadia, then choose Scan Sector for free.', action: null},
+    {done: state.turn > 1 || state.missions.length > 0 || (home?.discovered || 0) > 0, text: `Explore ${home?.world === 'earth' ? 'Earth' : 'Mars'} HQ: select an unsurveyed sector near your command center, then choose Scan Sector for free.`, action: null},
     {done: softwareChanged, text: 'Open SOFTWARE, run the lab test and fix the flight rules that fail.', action: 'software'},
     {done: JSON.stringify(state.orders) !== JSON.stringify(defaults.orders), text: 'Write standing orders so bases survive storms on their own.', action: 'software'},
-    {done: state.missions.length > 0, text: 'In the SHIPYARD, wait for a good launch window and make every check green.', action: 'planner'},
+    {done: state.missions.length > 0, text: 'In the SHIPYARD, plan a landing on Earth. Make every check green, launch, and advance turns to arrive.', action: 'planner'},
     {done: state.turn >= 3, text: 'Press NEXT TURN. Prepare bases for forecast hazards in PROGRAMME.', action: 'program'},
   ];
 }

@@ -5,15 +5,15 @@ import {mountSolarSystem,solarPositions,solarSystemView} from '../web/solar-syst
 
 const fixture=JSON.parse(readFileSync(0,'utf8'));
 fixture.state.turn=5;
-fixture.state.missions.push({id:'TEST-M1',status:'in_flight',source:'H1',destination:'mars',departed:1,arrivesAt:9});
+fixture.state.missions.push({id:'TEST-M1',status:'in_flight',source:'H1',destination:'earth',departed:1,arrivesAt:9});
 const original=JSON.stringify(fixture.state);
 const html=solarSystemView({...fixture,selected:'earth',showRoutes:true,date:'TEST'});
 const svg=html.match(/<svg[\s\S]*?<\/svg>/)[0];
-for(const id of ['mercury','venus','earth','mars','europa']){
+for(const id of Object.keys(fixture.catalog.worlds)){
   const view=solarSystemView({...fixture,selected:id,showRoutes:true,date:'TEST'});
   assert.ok(view.includes(`data-action="solar-map" data-id="${id}"`));
 }
-for(const id of ['sun','jupiter','saturn','uranus','neptune']){
+for(const id of ['sun']){
   assert.ok(!solarSystemView({...fixture,selected:id,showRoutes:true,date:'TEST'}).includes('data-action="solar-map"'));
 }
 assert.ok(!solarSystemView({...fixture,selected:'earth',showRoutes:false,date:'TEST'}).includes('class="solar-flight"'));
@@ -78,8 +78,8 @@ for(const node of m.nodes){
 assert.equal(m.moon.attrs.transform,m.nodes.find(n=>n.dataset.id==='jupiter').attrs.transform);
 const earth=m.nodes.find(n=>n.dataset.id==='earth'),mars=m.nodes.find(n=>n.dataset.id==='mars');
 const route=m.paths[0],path=route.querySelector('path'),marker=route.querySelector('circle');
-assert.ok(path.attrs.d.startsWith(`M${point(earth).x} ${point(earth).y} `));
-assert.ok(path.attrs.d.endsWith(` ${point(mars).x} ${point(mars).y}`));
+assert.ok(path.attrs.d.startsWith(`M${point(mars).x} ${point(mars).y} `));
+assert.ok(path.attrs.d.endsWith(` ${point(earth).x} ${point(earth).y}`));
 assert.equal(route.dataset.progress,'0.5');
 assert.ok(Math.abs(Number(marker.attrs.cx)-(point(earth).x+point(mars).x)/2)<1e-8);
 
