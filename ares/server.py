@@ -15,8 +15,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__
-from . import engine, campaign
-from .campaign_data import catalog as campaign_catalog
+from . import engine, campaign, faults
+from .campaign_data import campaign_catalog
 
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -29,6 +29,10 @@ STATIC_TYPES = {
     "map-game.css": "text/css; charset=utf-8",
     "planet-map.js": "text/javascript; charset=utf-8",
     "map-ui.js": "text/javascript; charset=utf-8",
+    "program-ui.js": "text/javascript; charset=utf-8",
+    "rule-editor.js": "text/javascript; charset=utf-8",
+    "flight-view.js": "text/javascript; charset=utf-8",
+    "program.css": "text/css; charset=utf-8",
     "bridge.js": "text/javascript; charset=utf-8",
     "engine-view.js": "text/javascript; charset=utf-8",
     "art.js": "text/javascript; charset=utf-8",
@@ -69,7 +73,7 @@ class GameHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate"):
+        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test"):
             self._json({"ok": False, "error": "Unknown endpoint."}, HTTPStatus.NOT_FOUND)
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -90,6 +94,10 @@ class GameHandler(BaseHTTPRequestHandler):
             return
         if not isinstance(payload, dict):
             self._json({"ok": False, "error": "Expected a JSON object."}, HTTPStatus.BAD_REQUEST)
+            return
+        if path == "/api/campaign/faults/test":
+            result = faults.run_tests(payload.get("design"))
+            self._json(result, HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST)
             return
         if path.startswith("/api/campaign/"):
             if path == "/api/campaign/new":

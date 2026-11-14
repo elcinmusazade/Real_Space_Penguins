@@ -74,12 +74,15 @@ class ServerTests(unittest.TestCase):
             "source": "H1", "destination": "venus", "objective": "surface",
             "site": "Ishtar Terra", "hull": "lander", "engine": "chemical",
             "trajectory": "balanced", "payload": ["rover", "lab", "shield"],
+            "vehicle": "heavy", "propellantKg": 200,
         }
         status, _, raw = self.request("/api/campaign/quote", {"state": state, "design": design})
         self.assertEqual(status, 200)
         quote = json.loads(raw)
         self.assertTrue(quote["ok"])
         self.assertTrue(quote["affordable"])
+        self.assertEqual(quote["outcome"], "go")
+        self.assertEqual(quote["transfer"]["source"], "gmat")
         status, _, raw = self.request("/api/campaign/action", {"state": state, "action": "launch", "args": {"design": design}})
         self.assertEqual(status, 200)
         result = json.loads(raw)
@@ -96,6 +99,19 @@ class ServerTests(unittest.TestCase):
         status, _, raw = self.request("/api/campaign/validate", {"state": state})
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(raw)["ok"])
+
+    def test_flight_software_test_endpoint(self):
+        status, _, raw = self.request("/api/campaign/faults/test", {"design": {"computer": "standard", "rules": []}})
+        self.assertEqual(status, 200)
+        result = json.loads(raw)
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(result["results"]), 4)
+        status, _, _ = self.request("/api/campaign/faults/test", {"design": {"computer": "quantum", "rules": []}})
+        self.assertEqual(status, 400)
+        status, _, raw = self.request("/api/campaign/catalog")
+        catalog = json.loads(raw)["catalog"]
+        for key in ("vehicles", "physics", "faults", "orders", "goals", "hazards"):
+            self.assertIn(key, catalog)
 
     def test_campaign_rejects_bad_design_and_invalid_save(self):
         state = json.loads(self.request("/api/campaign/new", {"seed": "HTTP-INVALID"})[2])["state"]
