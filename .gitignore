@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 .pytest_cache/
 *.log
+
+# Local NASA GMAT clone (1.9 GB reference source; not part of the game)
+GMAT/
