@@ -90,3 +90,32 @@ Make a **32×32 interactive isometric world map the primary screen**, not a tabu
 - Buildings wear; crews can die and bases can be lost, then reopened by a landing at the same site. Uncrewed stations go dark after three unpowered turns and revive with an energy shipment.
 - Yearly reviews move the budget (4-30 credits per turn) and goals pay rewards. **No cancellation, end or loss condition** until the user decides on endings.
 - Only the Atlas V 401 has GMAT performance data; heavy and super-heavy classes are labelled estimates. Real terrain elevation data was not added: it needs a new external download, which needs the user's approval.
+
+
+## D-013 — Playable Earth headquarters
+
+**Status:** Implemented. **Date:** 2026-11-14. **Reason:** The user explicitly requested “a hub like on Mars” after the cosmetic headquarters and operations panel did not provide map gameplay.
+
+Earth HQ now shares the surface map, rover, construction, production, upkeep, and repair systems. Greenhouses work on Earth as well as Mars. Preserve the existing command hub ID/type, launch rules, cargo references, passive materials/fuel, and budget income. Keep Earth command available without off-world hazards or crew survival; all new terrain/yield/wear values are game estimates. Existing V2/V3 saves gain the Earth map without resetting their stockpiles or progress. This supersedes the earlier Earth-only-as-mission-control implementation default.
+
+
+## D-014 — Collapsible solar-system navigation
+
+**Status:** Implemented; browser verification pending permission. **Date:** 2026-11-14. **Reason:** User requested an opening/closing planet-selection sidebar that looks and behaves like the supplied solar-system image.
+
+Use a compact map launcher and an expanded interactive solar-system dialog with inspectable planets, zoom/pan/fit, destination shortcuts, live hub status, and active mission/cargo links. Keep existing Python destinations and save mechanics. The Sun and outer planets are navigation landmarks; Europa belongs to the Jupiter system. Positions, orbit paths, and visual sizes are explicitly schematic. Use local SVG/CSS artwork, native keyboard-accessible controls, responsive layout, and reduced-motion support without external services or dependencies.
+
+**Visual extension (2026-11-14):** User requested a more lively, rotating map while retaining the rest. Animate planet surfaces, orbit highlights and ambient light with a Pause/Play control. Keep selectable body positions steady in the existing reference composition; rotation speeds are decorative, not physical timing. Suspend motion for reduced-motion preferences and hidden tabs, and preserve animation phase during navigation.
+
+**Orbital correction (2026-11-14):** The user clarified that the planet images themselves must move. This supersedes the fixed-position choice above: fit complete ellipses around a centered Sun and move body groups, labels and click targets along them. Europa orbits moving Jupiter, and route endpoints follow their bodies. Hover and keyboard focus hold motion for selection. Orbital speeds remain decorative and do not advance campaign turns; remove the standalone moving orbit-line highlights.
+
+
+## D-015 — Living isometric regions, surveys and terrain-dependent production
+
+**Status:** Implemented from the user's request. **Date:** 2026-11-14.
+
+The user chose Living isometric, asked for richer geography including seas, removed the rover mechanic, and requested deeper game logic. This supersedes the campaign rover requirements in D-001/D-009; Classic V1 is preserved. Earth gets seas, fresh water, coastlines, forests, fertile ground and mountains; other worlds get distinct fictional landscapes. Orbital imagery exposes biome/elevation, while surveys reveal deposits/anomalies. No external terrain data or NASA validation is implied.
+
+Use terrain and production as the depth implementation: coastal water intake, fertile-food/geology/solar bonuses, site preparation costs, blocked water/fissures and a water-to-oxygen plant. Inspection and execution share Python rules. Selecting a tile does not spend resources; explicit survey/build buttons follow visible cost and availability information. Nearby scans remain free; a hub can run one energy-funded regional 3×3 survey in 1–3 turns. Survey Station payload and Remote Sensing research replace rover options while keeping old saves and missions usable.
+
+Use code-native Canvas2D landscapes and subtle ambient animation, preserving the existing solar navigator and all flight mechanics. No map rotation or real-time simulation is introduced. Long-run balancing and actual browser layout/performance still need play-testing.

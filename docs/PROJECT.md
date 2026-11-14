@@ -8,16 +8,20 @@
 - Hybrid mission planning, survival, and expansion gameplay.
 - Turn-based progression.
 - An interactive colony map where buildings can be placed.
-- Fog of war hiding undiscovered terrain.
-- Instant tile discovery, without manual rover movement.
+- Orbital imagery shows geography; surveys reveal hidden deposits and anomalies.
+- Instant local scans and delayed regional surveys, without campaign rovers.
 - Shared repository documentation usable by humans, ChatGPT/Codex, and Claude in later chats.
-- **V2 requirements:** No action points; free nearby scans and resource/time-gated distant rover surveys; a startup assistant briefing; missions to **Mars, Venus, Mercury, and Europa**; hands-on spacecraft design and mission planning; Earth Mission Control plus **multiple separate surface and orbital hubs** on a world; resource transfer through actual ships/convoys, with time and cost.
+- **V2 requirements:** No action points; free nearby scans and energy/time-gated regional surveys; a startup assistant briefing; missions to **Mars, Venus, Mercury, and Europa**; hands-on spacecraft design and mission planning; Earth Mission Control plus **multiple separate surface and orbital hubs** on a world; resource transfer through actual ships/convoys, with time and cost.
 - Earth-departure trajectories use NASA GMAT's bundled data (DE421, Atlas V 401) through an offline Lambert table; everything else in flight planning is a labelled game estimate. A campaign ending is on hold by user request.
 - **Map-first visual redesign:** The game must feel like a strategy game, with a very large explorable map on each planet and at each planetary outpost, not a dashboard.
 
-## Current campaign (V2) implementation defaults
+- **Solar-system navigation (2026-11-14):** Replace the planet-list sidebar with an open/close solar-system navigator, selectable worlds, zoom/pan, hub and traffic details, and working map/mission shortcuts. Use the supplied solar-system image as the visual reference. Planet images must visibly orbit the Sun, with Europa orbiting Jupiter; moving line highlights alone do not satisfy the motion request.
 
-- 32×32 fogged isometric map per surface hub; overview/minimap/pan/zoom, instant local scans, distant 3×3 rover surveys, no action-point cap. Earth remains mission control, not a colonizable Earth surface.
+- **Living isometric terrain (2026-11-14):** User selected this direction, requested more diversity including seas, removal of the rover mechanic, and deeper game logic. Implemented natural regions, elevation, site costs/yields, coastal water and a water-to-oxygen supply chain. Terrain/production is the implementation choice for depth; no additional preference was received.
+
+## Current campaign implementation defaults
+
+- 32×32 living isometric map per surface hub; overview/minimap/pan/zoom, instant local scans, regional 3×3 surveys, no action-point cap. Earth Mission Control also has a playable map and the same construction/production controls as Mars (user request, 2026-11-14). Its existing launch, funding, and supply role is retained; there are no additional Earth landing sites.
 - Three ship hulls, three engines, three trajectories, six payload choices; surface/orbital/science missions with selected sites.
 - Multiple separate hubs across all four destinations, orbital depots, delayed transit shipments, research, hazard choices, robotic world missions, and a System Pathfinder milestone. Mission results are deterministic for a saved seed and mission ID.
 - Starting Mars colony is already established alongside Earth Mission Control; Venus/Mercury/Europa bases are robotic with simplified hazards. Crewed survival gameplay is currently modeled only for Mars.
@@ -45,4 +49,3 @@ The primary inspiration is [Space Mission Design Game](https://www.spaceappschal
 ## Quality bar
 
 The game needs a complete launch-to-debrief loop, meaningful choices, a reachable win, an understandable failure, honest NASA attribution, and a repeatable simulation. A visually complete screen is not enough without working controls.
-

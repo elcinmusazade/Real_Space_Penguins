@@ -29,6 +29,8 @@ STATIC_TYPES = {
     "map-game.css": "text/css; charset=utf-8",
     "planet-map.js": "text/javascript; charset=utf-8",
     "map-ui.js": "text/javascript; charset=utf-8",
+    "solar-system.js": "text/javascript; charset=utf-8",
+    "solar-system.css": "text/css; charset=utf-8",
     "program-ui.js": "text/javascript; charset=utf-8",
     "rule-editor.js": "text/javascript; charset=utf-8",
     "flight-view.js": "text/javascript; charset=utf-8",
@@ -73,7 +75,7 @@ class GameHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test"):
+        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test", "/api/campaign/inspect"):
             self._json({"ok": False, "error": "Unknown endpoint."}, HTTPStatus.NOT_FOUND)
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -114,6 +116,9 @@ class GameHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/campaign/validate":
                 self._json(checked)
+                return
+            if path == "/api/campaign/inspect":
+                self._json(campaign.inspect_surface(checked["state"], payload.get("hub"), payload.get("tile")))
                 return
             if path == "/api/campaign/quote":
                 self._json(campaign.mission_quote(checked["state"], payload.get("design")))

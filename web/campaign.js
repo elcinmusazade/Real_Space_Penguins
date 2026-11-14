@@ -1,6 +1,7 @@
 /** Browser interface for the Python-authoritative interplanetary campaign. */
 import {mountPlanetMap} from './planet-map.js';
 import {mapScreen} from './map-ui.js';
+import {solarSystemView,mountSolarSystem} from './solar-system.js';
 import {softwareView, programView, softwareConfig, ordersConfig, guideSteps} from './program-ui.js';
 import {applyRuleAction, applyRuleField} from './rule-editor.js';
 import {playLaunch, playArrival} from './flight-view.js';
@@ -15,9 +16,13 @@ const terrainLabel = {plain:'PLAIN',ice:'ICE',ridge:'RIDGE',science:'SCIENCE',sa
 const resourceName = {energy:'Energy',materials:'Materials',fuel:'Fuel',water:'Water',food:'Food',oxygen:'Oxygen',heat:'Heat'};
 let catalog=null, state=null, quote=null, pending=false, quoteId=0;
 let tab='system', selectedWorld='mars', selectedHub='H2', selectedBuilding=null, selectedTile=528;
-let mapController=null;
+let mapController=null, mapMotion=true;
+let inspection=null, inspectionKey=null, inspectionRequest=0;
+let solarOpen=false,solarSelected='mars',solarRoutes=true,solarController=null;
+const solarCamera={x:0,y:0,zoom:1};
+const solarMotion={paused:false,elapsedMs:0};
 let modal='intro', assistantTopic='welcome';
-let draft={source:'H1',destination:'mars',site:'Jezero Rim',objective:'surface',hull:'lander',engine:'chemical',trajectory:'balanced',payload:['rover','lab'],vehicle:'atlas_v_401',propellantKg:600};
+let draft={source:'H1',destination:'mars',site:'Jezero Rim',objective:'surface',hull:'lander',engine:'chemical',trajectory:'balanced',payload:['survey','lab'],vehicle:'atlas_v_401',propellantKg:600};
 let softwareDraft=null, ordersDraft=null, softwareTest=null, guideHidden=false;
 const GUIDE_KEY='ares.first-light.guide-hidden';
 try{guideHidden=localStorage.getItem(GUIDE_KEY)==='1';}catch{/* storage unavailable */}
@@ -106,9 +111,9 @@ function flightList(limit=5) {
   const records=[
     ...activeFlights().map(m=>({id:m.id,name:`${world(m.destination).name} · ${m.objective}`,time:m.arrivesAt,kind:'MISSION',color:m.destination})),
     ...activeCargo().map(s=>({id:s.id,name:`${s.amount} ${resourceName[s.resource]} → ${hub(s.target)?.name||s.target}`,time:s.arrivesAt,kind:'CARGO',color:'cargo'})),
-    ...state.expeditions.filter(e=>e.status==='en_route').map(e=>({id:e.id,name:`Rover expedition · ${hub(e.hub)?.name||e.hub}`,time:e.arrivesAt,kind:'ROVER',color:'rover'})),
+    ...state.surveys.filter(e=>e.status==='en_route').map(e=>({id:e.id,name:`Regional survey · ${hub(e.hub)?.name||e.hub}`,time:e.arrivesAt,kind:'SURVEY',color:'survey'})),
   ].sort((a,b)=>a.time-b.time);
-  return records.length?records.slice(0,limit).map(m=>`<div class="timeline-row"><span class="timeline-mark ${m.color}">↗</span><div><b>${esc(m.id)} · ${esc(m.name)}</b><small>${m.kind}</small></div><span class="eta">${until(m.time)}</span></div>`).join(''):'<div class="empty-state">No spacecraft or rovers currently in transit. Design a mission or dispatch supplies to begin.</div>';
+  return records.length?records.slice(0,limit).map(m=>`<div class="timeline-row"><span class="timeline-mark ${m.color}">↗</span><div><b>${esc(m.id)} · ${esc(m.name)}</b><small>${m.kind}</small></div><span class="eta">${until(m.time)}</span></div>`).join(''):'<div class="empty-state">No spacecraft or regional surveys in progress. Design a mission or dispatch supplies to begin.</div>';
 }
 
 function systemView() {
@@ -171,9 +176,16 @@ function plannerView() {
 function stockCards(h) {return `<div class="stock-grid">${Object.entries(h.stocks).map(([key,value])=>`<div class="stock-item"><small>${esc(resourceName[key]||key)}</small><strong>${num(value)}</strong></div>`).join('')}</div>`;}
 
 function tileLabel(tile,h) {
-  const task=state.expeditions.find(e=>e.hub===h.id&&e.tile===tile.id&&e.status==='en_route');
-  if(!tile.revealed)return task?`<small>ROVER</small><b>${until(task.arrivesAt)}</b>`:'<b class="question">?</b>';
+  const task=state.surveys.find(e=>e.hub===h.id&&e.tile===tile.id&&e.status==='en_route');
+  if(!tile.revealed)return task?`<small>SURVEY</small><b>${until(task.arrivesAt)}</b>`:'<b class="question">?</b>';
   return `<small>${esc(terrainLabel[tile.terrain]||'BASE')}</small><b>${tile.building?esc(tile.building.type==='habitat'?'⌂':tile.building.type==='solar'?'☀':tile.building.type==='shield'?'⬡':'◈'):'·'}</b><span>${tile.id+1}</span>`;
+}
+
+function controlView() {
+  const h=hub(selectedHub);
+  return `${ribbon('MISSION CONTROL','EARTH / OPERATIONS')}<div class="page-heading"><div><h1>${esc(h.name)}</h1><p>Design spacecraft, send supplies, and research technology for your outposts.</p></div>${pill('COMMAND HUB ONLINE','green')}</div>
+    <div class="form-grid"><button class="button primary" data-action="map-plan">DESIGN MISSION ↗</button><button class="button secondary" data-action="map-supply" data-id="${esc(h.id)}">SEND RESOURCES →</button><button class="button secondary" data-action="nav" data-id="research">OPEN TECH TREE →</button></div>
+    <section class="surface-card inventory-panel"><div class="subheading"><h2>Earth stockpile</h2><span>AVAILABLE FOR LAUNCHES &amp; SHIPMENTS</span></div>${stockCards(h)}</section>`;
 }
 
 function hubsView() {
@@ -182,16 +194,16 @@ function hubsView() {
   const operations=h.kind==='surface';
   const tile=h.tiles[selectedTile]||h.tiles[12];
   return `${ribbon('COLONY OPERATIONS','SURFACE / ORBITAL HUBS')}<div class="page-heading"><div><h1>Every outpost matters.</h1><p>Hubs have their own stockpiles. Resources move only when you schedule a shipment.</p></div>${pill('NO ACTION POINTS','green')}</div>
-  <div class="hub-picker">${selectField('hub',Object.keys(hubOptions),h.id,hubOptions)}<div><small>LOCATION</small><b>${esc(world(h.world).name)} · ${esc(h.kind.toUpperCase())}</b></div><div><small>CREW HEALTH</small><b>${h.crew.length?`${h.health}%`:'AUTONOMOUS'}</b></div><div><small>ROVERS</small><b>${h.rovers} ${h.roverBusyUntil>state.turn?`· BUSY TO T${h.roverBusyUntil}`:''}</b></div></div>
-  ${operations?`<div class="hub-layout"><section class="surface-card terrain-panel"><div class="subheading"><h2>Sector map · ${esc(h.site)}</h2><span>${h.tiles.filter(t=>t.revealed).length}/25 SURVEYED</span></div><p class="field-description">Click hidden nearby sectors for a free scan. Distant sectors require a rover expedition and several turns. Select a building to construct.</p>
+  <div class="hub-picker">${selectField('hub',Object.keys(hubOptions),h.id,hubOptions)}<div><small>LOCATION</small><b>${esc(world(h.world).name)} · ${esc(h.kind.toUpperCase())}</b></div><div><small>CREW HEALTH</small><b>${h.crew.length?`${h.health}%`:'AUTONOMOUS'}</b></div><div><small>SURVEY UPLINK</small><b>${h.surveyUntil>state.turn?`BUSY TO T${h.surveyUntil}`:'READY'}</b></div></div>
+  ${operations?`<div class="hub-layout"><section class="surface-card terrain-panel"><div class="subheading"><h2>Sector map · ${esc(h.site)}</h2><span>${h.tiles.filter(t=>t.revealed).length}/${h.tiles.length} SURVEYED</span></div><p class="field-description">Select a sector, then use Scan Sector in the map inspector. Regional surveys cost energy and take up to three turns. Choose a building and review its site costs before selecting Build Here.</p>
   <div class="terrain-map world-map-${h.world}">${h.tiles.map(tile=>`<button class="terrain-tile ${tile.revealed?'surveyed':'hidden'} ${tile.terrain||''} ${selectedTile===tile.id?'picked':''} ${selectedBuilding?'building-mode':''}" data-action="tile" data-id="${tile.id}" title="Sector ${tile.id+1}${tile.revealed?` · ${tile.terrain}`:' · Unexplored'}" aria-label="Sector ${tile.id+1}, ${tile.revealed?tile.terrain:'unexplored'}">${tileLabel(tile,h)}</button>`).join('')}</div>
   <div class="terrain-foot"><span>▦ BASE CONNECTIVITY REQUIRED</span><span>${selectedBuilding?`PLACING ${esc(catalog.buildings[selectedBuilding].name)}`:'SURVEY MODE'}</span></div></section>
-  <aside class="surface-card inspector"><div class="subheading"><h2>Sector ${tile.id+1}</h2><span>${tile.revealed?'SURVEYED':'FOG OF WAR'}</span></div><div class="inspector-illustration ${tile.terrain||'unknown'}">${tile.revealed?(tile.building?'⌂':glyph[h.world]):'？'}</div><h3>${tile.revealed?esc((terrainLabel[tile.terrain]||'Unknown')+' TERRAIN'):'Uncharted region'}</h3><p>${tile.revealed?(tile.building?`Installed ${tile.building.type}. ${tile.building.onlineFrom>state.turn?`Online on turn ${tile.building.onlineFrom}.`:'Currently operating if supplied.'}`:'A candidate for construction, subject to site and resource requirements.'):'Free scans cover the immediate hub perimeter. Farther surveys require a rover, fuel and travel time.'}</p>
-  ${selectedBuilding?`<div class="callout">Construction selected: <b>${esc(catalog.buildings[selectedBuilding].name)}</b>. Click an empty surveyed neighboring tile.</div><button class="button secondary full" data-action="cancel-build">CANCEL CONSTRUCTION</button>`:`<div class="callout">${tile.revealed?'Select a structure below to begin planning.':'Click this sector to scan it or dispatch a rover.'}</div>`}</aside></div>
+  <aside class="surface-card inspector"><div class="subheading"><h2>Sector ${tile.id+1}</h2><span>${tile.revealed?'SURVEYED':'FOG OF WAR'}</span></div><div class="inspector-illustration ${tile.terrain||'unknown'}">${tile.revealed?(tile.building?'⌂':glyph[h.world]):'？'}</div><h3>${tile.revealed?esc((terrainLabel[tile.terrain]||'Unknown')+' TERRAIN'):'Uncharted region'}</h3><p>${tile.revealed?(tile.building?`Installed ${tile.building.type}. ${tile.building.onlineFrom>state.turn?`Online on turn ${tile.building.onlineFrom}.`:'Currently operating if supplied.'}`:'A candidate for construction, subject to site and resource requirements.'):'Free scans cover the immediate hub perimeter. Regional surveys use energy to map a 3×3 area.'}</p>
+  ${selectedBuilding?`<div class="callout">Construction selected: <b>${esc(catalog.buildings[selectedBuilding].name)}</b>. Select an empty surveyed neighboring tile and choose Build Here.</div><button class="button secondary full" data-action="cancel-build">CANCEL CONSTRUCTION</button>`:`<div class="callout">${tile.revealed?'Select a structure below to begin planning.':'Select this sector, then start a survey in the map inspector.'}</div>`}</aside></div>
   <div class="surface-card"><div class="subheading"><h2>Construction bay</h2><span>MATERIALS + TIME · NO AP</span></div><div class="building-grid">${Object.entries(catalog.buildings).map(([id,b])=>`<button class="building-card ${selectedBuilding===id?'selected':''}" data-action="build-mode" data-id="${id}"><span class="building-symbol">${id==='solar'?'☀':id==='heater'?'♨':id==='extractor'?'≋':id==='greenhouse'?'❀':id==='laboratory'?'✧':id==='shield'?'⬡':'▤'}</span><b>${esc(b.name)}</b><small>${b.materials} MAT · ${b.turns} TURN${b.turns>1?'S':''}</small><span>${esc(b.description)}</span></button>`).join('')}</div></div>`:`<section class="surface-card orbit-panel"><div class="orbital-symbol">◇</div><h2>${h.kind==='control'?'Earth-based command center':'Orbital refueling and communications station'}</h2><p>${h.kind==='control'?'The central shipyard finances missions and manufactures launch materials and fuel each turn.':'Orbital hubs stock fuel and contribute scientific data each turn. They reduce flight costs and connect surface stations through cargo spacecraft.'}</p><button class="button primary" data-action="nav" data-id="logistics">SEND RESOURCES →</button></section>`}
   <section class="surface-card inventory-panel"><div class="subheading"><h2>Local inventories</h2><span>NO AUTOMATIC SHARING</span></div>${stockCards(h)}</section>
   ${h.crew.length?`<section class="surface-card"><div class="subheading"><h2>Astronaut assignments</h2><span>REAL-TIME COMMANDS · NO AP</span></div><div class="crew-grid">${h.crew.map((person,i)=>`<label class="crew-card"><span class="crew-avatar">${esc(person.name.split(' ').map(n=>n[0]).join(''))}</span><b>${esc(person.name)}</b><small>${esc(person.specialty)}</small><select data-field="crew" data-index="${i}">${['engineering','science','survival'].map(role=>`<option value="${role}" ${person.assigned===role?'selected':''}>${role.toUpperCase()}</option>`).join('')}</select></label>`).join('')}</div></section>`:''}
-  <section class="surface-card"><div class="subheading"><h2>Rover operations</h2><span>${h.rovers} ASSIGNED</span></div>${state.expeditions.filter(e=>e.hub===h.id&&e.status==='en_route').map(e=>`<div class="timeline-row"><span class="timeline-mark rover">⟡</span><div><b>Rover ${e.id} → Sector ${e.tile+1}</b><small>Expedition underway</small></div><span class="eta">${until(e.arrivesAt)}</span></div>`).join('')||'<p class="muted">No active rover expedition. Select a distant fogged tile to dispatch one.</p>'}</section>`;
+  <section class="surface-card"><div class="subheading"><h2>Regional surveys</h2><span>REMOTE SENSING</span></div>${state.surveys.filter(e=>e.hub===h.id&&e.status==='en_route').map(e=>`<div class="timeline-row"><span class="timeline-mark survey">⟡</span><div><b>Survey ${e.id} → Sector ${e.tile+1}</b><small>Survey in progress</small></div><span class="eta">${until(e.arrivesAt)}</span></div>`).join('')||'<p class="muted">No active regional survey. Select a sector on the map to inspect its survey cost.</p>'}</section>`;
 }
 
 function logisticsView() {
@@ -214,7 +226,7 @@ function assistantMessage() {
   const topics={
     welcome:`Commander, ${state.hubs.length} hubs are online. Each has its own stockpile. Use the Mission Designer to launch new outposts; never assume resources teleport between worlds.`,
     ships:'Choose a hull, engine, trajectory, and payload. The Python flight planner estimates mass, fuel, travel turns and arrival risk. These are game estimates, pending GMAT data.',
-    exploration:'Nearby fogged tiles can be scanned freely. Distant sites need an available rover; after its travel time, the sector reveals immediately. No action points limit your orders.',
+    exploration:'Nearby fogged tiles can be scanned freely. Select a distant sector and start a regional survey: energy buys a 3×3 scan in one to three turns. Coasts supply water, fertile soil boosts food, and rocky terrain improves mining. Water plants feed greenhouses and oxygen plants. No action points limit your orders.',
     logistics:'Select two hubs in Logistics and dispatch a shipment. It consumes fuel and credits, travels for turns, and establishes a supply corridor when delivered.',
     survival:'Crewed outposts consume food, water, oxygen, heat and power each turn. Supply shortages lower crew health. Solar arrays, extractors, heaters and greenhouses help balance production.',
   };
@@ -243,43 +255,64 @@ function guideCard(){
   return `<aside class="guide-card" aria-label="First mission guide"><div class="hud-kicker">FIRST MISSION GUIDE · STEP ${index+1} / ${steps.length} <button class="guide-close" data-action="guide-hide" aria-label="Hide guide">✕</button></div><p>${step.action?`<button data-action="nav" data-id="${step.action}">${esc(step.text)} →</button>`:esc(step.text)}</p></aside>`;
 }
 
-function activeSurface(){const candidates=state.hubs.filter(h=>h.world===selectedWorld&&h.kind==='surface');return candidates.find(h=>h.id===selectedHub)||candidates[0]||null;}
+function activeSurface(){const candidates=state.hubs.filter(h=>h.world===selectedWorld&&h.tiles.length);return candidates.find(h=>h.id===selectedHub)||candidates[0]||null;}
 
 async function selectMapTile(index){
   selectedTile=index;
   const surface=activeSurface();
-  if(!surface){render();return;}
-  const tile=surface.tiles[index];
-  if(selectedBuilding){
-    if(!tile.revealed||tile.building){notify('Choose an empty surveyed sector touching a facility.',true);render();return;}
-    const previous=state;
-    await perform('construct',{hub:surface.id,tile:index,building:selectedBuilding});
-    if(state!==previous)selectedBuilding=null;
+  if(!surface){
+    const control=state.hubs.find(h=>h.world===selectedWorld&&h.kind==='control'),mid=Math.floor((catalog.mapSize||32)/2);
+    if(control&&index===mid*(catalog.mapSize||32)+mid){selectedHub=control.id;tab='hubs';}
     render();return;
   }
-  if(!tile.revealed)await perform('explore',{hub:surface.id,tile:index});
-  else render();
+  render();
+
+}
+
+function inspectionMatches(){const h=activeSurface();return inspectionKey?.state===state&&inspectionKey.hub===h?.id&&inspectionKey.tile===selectedTile;}
+async function refreshInspection(){
+  const h=activeSurface();
+  if(!h){inspectionKey=null;inspection=null;inspectionRequest++;return;}
+  if(inspectionMatches())return;
+  const key={state,hub:h.id,tile:selectedTile},request=++inspectionRequest;
+  inspectionKey=key;inspection=null;
+  try{const result=await api('/api/campaign/inspect',{state,hub:h.id,tile:selectedTile});if(request===inspectionRequest&&inspectionMatches()){inspection=result;render();}}
+  catch(error){if(request===inspectionRequest&&inspectionMatches()){inspection={ok:false,error:error.message};render();}}
 }
 
 function mountGameMap(){
   const canvas=document.querySelector('#planet-map');
   if(!canvas)return;
   const surface=activeSurface();
+  const control=state.hubs.find(h=>h.world===selectedWorld&&h.kind==='control');
   mapController=mountPlanetMap(canvas,document.querySelector('#mini-map'),{
-    world:selectedWorld,hubId:surface?.id,size:catalog.mapSize||32,tiles:surface?.tiles||[],
-    selection:selectedTile,turn:state.turn,
-    expeditions:state.expeditions.filter(e=>surface&&e.hub===surface.id&&e.status==='en_route').map(e=>e.tile),
+    world:selectedWorld,hubId:surface?.id||control?.id,size:catalog.mapSize||32,tiles:surface?.tiles||catalog.surfacePreviews[selectedWorld]||[],biomes:catalog.biomes,buildingMode:Boolean(selectedBuilding),motion:mapMotion,controlHub:Boolean(control&&!surface),
+    selection:surface?selectedTile:null,turn:state.turn,
+    surveys:state.surveys.filter(e=>surface&&e.hub===surface.id&&e.status==='en_route').map(e=>e.tile),
     onSelect:selectMapTile,
   });
 }
 
 function render(){
   if(!state||!catalog)return;
-  const secondary=tab==='planner'?plannerView():tab==='logistics'?logisticsView():tab==='research'?researchView():tab==='software'?softwareView({catalog,state,softwareDraft,ordersDraft,softwareTest,dirtySoftware:!same(softwareDraft,state.software),dirtyOrders:!same(ordersDraft,state.orders)}):tab==='program'?programView({catalog,state,date:turnDate(state.turn)}):'';
+  const focused=document.activeElement;
+  const mapFocus=focused?.id==='planet-map';
+  const solarFocus=focused?.closest('.solar-dialog')?{tag:focused.tagName,action:focused.dataset.action,id:focused.dataset.id}:null;
+  solarController?.destroy();solarController=null;
+  const secondary=tab==='hubs'&&hub(selectedHub)?.kind==='control'?controlView():tab==='planner'?plannerView():tab==='logistics'?logisticsView():tab==='research'?researchView():tab==='software'?softwareView({catalog,state,softwareDraft,ordersDraft,softwareTest,dirtySoftware:!same(softwareDraft,state.software),dirtyOrders:!same(ordersDraft,state.orders)}):tab==='program'?programView({catalog,state,date:turnDate(state.turn)}):'';
   const lightWorld=selectedWorld==='earth'?null:selectedWorld;
-  app.innerHTML=`<div class="campaign-app map-mode">${topbar()}<main class="map-main">${mapScreen({catalog,state,selectedWorld,selectedHub,selectedBuilding,selectedTile,pending,date:turnDate(state.turn),lightMinutes:lightWorld?(catalog.lightMinutes?.[lightWorld]?.[(state.turn-1)%catalog.lightMinutes[lightWorld].length]??'—'):0,guide:guideCard()})}${secondary?`<div class="game-screen-dimmer"></div><section class="game-screen-panel"><button class="map-back" data-action="nav" data-id="system">← BACK TO MAP</button>${secondary}</section>`:''}</main></div>${modalMarkup()}`;
-  document.querySelector('.campaign-app').inert=Boolean(modal);
+  app.innerHTML=`<div class="campaign-app map-mode">${topbar()}<main class="map-main">${mapScreen({catalog,state,selectedWorld,selectedHub,selectedBuilding,selectedTile,pending,inspection:inspectionMatches()?inspection:null,mapMotion,date:turnDate(state.turn),lightMinutes:lightWorld?(catalog.lightMinutes?.[lightWorld]?.[(state.turn-1)%catalog.lightMinutes[lightWorld].length]??'—'):0,guide:guideCard()})}${secondary?`<div class="game-screen-dimmer"></div><section class="game-screen-panel"><button class="map-back" data-action="nav" data-id="system">← BACK TO MAP</button>${secondary}</section>`:''}</main></div>${solarOpen?solarSystemView({catalog,state,selected:solarSelected,showRoutes:solarRoutes,date:turnDate(state.turn)}):''}${modalMarkup()}`;
+  document.querySelector('.campaign-app').inert=Boolean(modal||solarOpen);
+  document.querySelector('[data-action="solar-open"]').setAttribute('aria-expanded',String(solarOpen));
   mountGameMap();
+  if(mapFocus)document.querySelector('#planet-map')?.focus({preventScroll:true});
+  refreshInspection();
+  if(solarOpen){
+    const panel=document.querySelector('.solar-dialog');
+    solarController=mountSolarSystem(panel,solarCamera,solarMotion);
+    const restored=solarFocus&&[...panel.querySelectorAll('[data-action]')].find(el=>el.tagName===solarFocus.tag&&el.dataset.action===solarFocus.action&&el.dataset.id===solarFocus.id);
+    (restored||panel.querySelector('.solar-close')).focus({preventScroll:true});
+  }
 }
 
 async function refreshQuote(){
@@ -316,19 +349,50 @@ function freeSite(id){
 
 function chooseDestination(id){selectedWorld=id;draft.destination=id;draft.site=freeSite(id);draft.objective='surface';tab='planner';quote=null;render();refreshQuote();}
 
+function closeSolar(){solarOpen=false;render();document.querySelector('[data-action="solar-open"]')?.focus({preventScroll:true});}
+function openWorldMap(id,hubId){
+  selectedWorld=id;
+  const established=hub(hubId)||state.hubs.find(h=>h.world===id&&h.tiles.length)||state.hubs.find(h=>h.world===id);
+  if(established)selectedHub=established.id;
+  selectedTile=(catalog.mapSize||32)*(catalog.mapSize||32)/2+(catalog.mapSize||32)/2;
+  selectedBuilding=null;tab='system';solarOpen=false;render();
+  document.querySelector('[data-action="solar-open"]')?.focus({preventScroll:true});
+}
+
 app.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]');
   if(!button||button.disabled)return;
   const action=button.dataset.action,id=button.dataset.id;
-  if(action==='nav'){tab=id;selectedBuilding=null;if(tab==='software'&&same(softwareDraft,state.software)&&same(ordersDraft,state.orders))resetDrafts();render();if(tab==='planner')refreshQuote();return;}
-  if(action==='map-world'){
-    selectedWorld=id;const established=state.hubs.find(h=>h.world===id&&h.kind==='surface')||state.hubs.find(h=>h.world===id);
-    if(established)selectedHub=established.id;
-    selectedTile=(catalog.mapSize||32)*(catalog.mapSize||32)/2+(catalog.mapSize||32)/2;
-    selectedBuilding=null;tab='system';render();return;
+  if(action==='solar-open'){solarSelected=selectedWorld;solarOpen=true;render();return;}
+  if(action==='solar-close'||(action==='solar-dismiss'&&event.target===button)){closeSolar();return;}
+  if(action==='solar-select'){solarSelected=id;render();return;}
+  if(action==='solar-zoom-in'){solarController?.zoom(1.25);return;}
+  if(action==='solar-zoom-out'){solarController?.zoom(.8);return;}
+  if(action==='solar-fit'){solarController?.fit();return;}
+  if(action==='solar-motion'){solarController?.toggleMotion();return;}
+  if(action==='solar-routes'){solarRoutes=!solarRoutes;render();return;}
+  if(action==='solar-map'){openWorldMap(id);return;}
+  if(action==='solar-plan'){solarOpen=false;chooseDestination(id);document.querySelector('.map-back')?.focus();return;}
+  if(action==='solar-operations'){solarOpen=false;selectedHub=id;selectedWorld='earth';tab='hubs';render();document.querySelector('.map-back')?.focus();return;}
+  if(action==='solar-hub'){
+    const h=hub(id);if(!h)return;
+    if(h.tiles.length){openWorldMap(h.world,id);return;}
+    solarOpen=false;selectedHub=id;selectedWorld=h.world;freight.source=id;
+    if(freight.target===id)freight.target=state.hubs.find(item=>item.id!==id)?.id||id;
+    tab='logistics';render();document.querySelector('.map-back')?.focus();return;
   }
+  if(action==='nav'){tab=id;selectedBuilding=null;if(tab==='software'&&same(softwareDraft,state.software)&&same(ordersDraft,state.orders))resetDrafts();render();if(tab==='planner')refreshQuote();return;}
+  if(action==='map-world'){openWorldMap(id);return;}
   if(action==='map-hub'){selectedHub=id;selectedWorld=hub(id).world;selectedTile=528;selectedBuilding=null;tab='system';render();return;}
-  if(action==='map-plan'){draft.destination=selectedWorld==='earth'?'mars':selectedWorld;draft.site=freeSite(draft.destination);draft.objective='surface';tab='planner';render();refreshQuote();return;}
+  if(action==='map-supply'){
+    freight.source=id;
+    if(freight.target===id)freight.target=state.hubs.find(h=>h.id!==id)?.id||id;
+    tab='logistics';render();return;
+  }
+  if(action==='map-plan'){if(selectedWorld==='earth')draft.source=state.hubs.find(h=>h.kind==='control').id;draft.destination=selectedWorld==='earth'?'mars':selectedWorld;draft.site=freeSite(draft.destination);draft.objective='surface';tab='planner';render();refreshQuote();return;}
+  if(action==='map-motion'){mapMotion=!mapMotion;render();return;}
+  if(action==='survey-sector'){const h=activeSurface();if(h)await perform('explore',{hub:h.id,tile:selectedTile});return;}
+  if(action==='construct-sector'){const h=activeSurface();if(h&&selectedBuilding){const previous=state;await perform('construct',{hub:h.id,tile:selectedTile,building:selectedBuilding});if(state!==previous)selectedBuilding=null;render();}return;}
   if(action==='map-zoom-in'){mapController?.zoom(1.22);return;}
   if(action==='map-zoom-out'){mapController?.zoom(1/1.22);return;}
   if(action==='map-center'){mapController?.centerOn();return;}
@@ -356,14 +420,7 @@ app.addEventListener('click',async event=>{
   if(action==='orders-save'){await perform('setOrders',{rules:ordersDraft});return;}
   if(action==='build-mode'){selectedBuilding=selectedBuilding===id?null:id;render();return;}
   if(action==='cancel-build'){selectedBuilding=null;render();return;}
-  if(action==='tile'){
-    selectedTile=Number(id);
-    const selected=hub(selectedHub).tiles[selectedTile];
-    if(selectedBuilding){const original=state;await perform('construct',{hub:selectedHub,tile:selectedTile,building:selectedBuilding});if(state!==original)selectedBuilding=null;render();}
-    else if(!selected.revealed)await perform('explore',{hub:selectedHub,tile:selectedTile});
-    else render();
-    return;
-  }
+  if(action==='tile'){await selectMapTile(Number(id));return;}
   if(action==='shipment'){await perform('shipment',{...freight,amount:Number(freight.amount)});return;}
   if(action==='research'){await perform('research',{tech:id});return;}
   if(action==='advance'){await perform('advance');return;}
@@ -408,6 +465,19 @@ app.addEventListener('input',event=>{
   clearTimeout(propTimer);propTimer=setTimeout(()=>{quote=null;refreshQuote();},180);
 });
 
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&modal&&modal!=='event'){modal=state?.event?'event':null;render();}});
+document.addEventListener('keydown',event=>{
+  if(solarOpen){
+    if(event.key==='Escape'){event.preventDefault();closeSolar();return;}
+    if((event.key==='Enter'||event.key===' ')&&event.target.matches('.solar-body')){event.preventDefault();solarSelected=event.target.dataset.id;render();return;}
+    if(event.key==='Tab'){
+      const controls=[...document.querySelectorAll('.solar-dialog button:not(:disabled),.solar-dialog [role="button"]')].filter(el=>el.getClientRects().length);
+      const first=controls[0],last=controls.at(-1);
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+    }
+    return;
+  }
+  if(event.key==='Escape'&&modal&&modal!=='event'){modal=state?.event?'event':null;render();}
+});
 
 initialize();

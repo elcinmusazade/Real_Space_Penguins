@@ -44,7 +44,7 @@ class ServerTests(unittest.TestCase):
         status, mime, css = self.request("/campaign.css")
         self.assertEqual((status, mime), (200, "text/css"))
         self.assertIn(b".terrain-map", css)
-        for path, expected_type in (("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css")):
+        for path, expected_type in (("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css")):
             code, kind, body = self.request(path)
             self.assertEqual((code,kind),(200,expected_type))
             self.assertGreater(len(body),100)
@@ -54,6 +54,20 @@ class ServerTests(unittest.TestCase):
         status, mime, js = self.request("/app.js")
         self.assertEqual((status, mime), (200, "text/javascript"))
         self.assertIn(b"./bridge.js", js)
+
+    def test_surface_inspection_endpoint_reports_costs_without_changing_save(self):
+        state = json.loads(self.request("/api/campaign/new", {"seed":"COAST"})[2])["state"]
+        before = json.dumps(state, sort_keys=True)
+        status, _, raw = self.request("/api/campaign/inspect", {"state":state, "hub":"H1", "tile":529})
+        self.assertEqual(status,200)
+        plan = json.loads(raw)
+        self.assertTrue(plan["ok"])
+        self.assertEqual(plan["buildings"]["recycler"]["inputs"], {"energy":4,"water":2})
+        self.assertEqual(plan["buildings"]["recycler"]["materials"],22)
+        self.assertEqual(json.dumps(state, sort_keys=True),before)
+        status, _, raw = self.request("/api/campaign/inspect", {"state":state, "hub":"H1", "tile":[]})
+        self.assertEqual(status,200)
+        self.assertFalse(json.loads(raw)["ok"])
 
     def test_health_uses_python_engine(self):
         status, _, raw = self.request("/api/health")

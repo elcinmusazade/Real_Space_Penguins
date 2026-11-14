@@ -39,7 +39,7 @@ ENGINES = {
 }
 
 PAYLOADS = {
-    "rover": {"name": "Exploration Rover", "mass": 300, "materials": 9, "description": "Enables planetary expeditions."},
+    "survey": {"name": "Survey Station", "mass": 300, "materials": 9, "description": "Deploys a surface command station with remote survey instruments."},
     "lab": {"name": "Science Instruments", "mass": 300, "materials": 10, "description": "Improves research rewards."},
     "habitat": {"name": "Crew Habitat", "mass": 500, "materials": 16, "description": "Supports a crewed Mars settlement."},
     "shield": {"name": "Environmental Shield", "mass": 300, "materials": 10, "description": "Protects probes in harsh destinations."},
@@ -56,21 +56,22 @@ TRAJECTORIES = {
 
 BUILDINGS = {
     "solar": {"name": "Solar Array", "materials": 15, "energy": 0, "turns": 1, "description": "Generates energy; sunlight varies by destination."},
-    "extractor": {"name": "Ice Extractor", "materials": 16, "energy": 3, "turns": 1, "description": "Produces water on discovered ice deposits."},
-    "greenhouse": {"name": "Greenhouse", "materials": 18, "energy": 4, "turns": 2, "description": "Produces food on Mars; consumes water and power."},
+    "extractor": {"name": "Water Plant", "materials": 16, "energy": 3, "turns": 1, "description": "Extracts ice, or draws water from an adjacent Earth sea or lake. Coastal intake needs extra power."},
+    "greenhouse": {"name": "Greenhouse", "materials": 18, "energy": 4, "turns": 2, "description": "Produces food on Earth and Mars; consumes water and power."},
     "laboratory": {"name": "Research Lab", "materials": 20, "energy": 4, "turns": 2, "description": "Produces science and processes surface samples."},
     "heater": {"name": "Thermal Control", "materials": 14, "energy": 3, "turns": 1, "description": "Maintains heat in inhabited outposts."},
     "drill": {"name": "Materials Drill", "materials": 18, "energy": 4, "turns": 2, "description": "Produces materials from local geology."},
+    "recycler": {"name": "Oxygen Plant", "materials": 22, "energy": 4, "turns": 2, "description": "Converts 2 water and 4 energy into 6 oxygen each turn. Water supply supports crew survival."},
     "shield": {"name": "Radiation Shield", "materials": 20, "energy": 2, "turns": 2, "description": "Reduces hazard impact on a hub."},
 }
 
 RESEARCH = {
-    "robotics": {"name": "Autonomous Rovers", "science": 18, "credits": 18, "turns": 2, "requires": [], "description": "Reduces rover expedition time by one turn."},
+    "surveying": {"name": "Remote Sensing", "science": 18, "credits": 18, "turns": 2, "requires": [], "description": "Reduces regional survey time by one turn."},
     "propulsion": {"name": "Precision Navigation", "science": 24, "credits": 24, "turns": 3, "requires": [], "description": "Reduces planned mission fuel use by 15%."},
     "logistics": {"name": "Orbital Logistics", "science": 24, "credits": 24, "turns": 3, "requires": ["propulsion"], "description": "Reduces freight fuel use and establishes better routes."},
     "thermal": {"name": "Extreme-World Protection", "science": 20, "credits": 20, "turns": 2, "requires": [], "description": "Reduces hazard risk at Venus, Mercury, and Europa."},
-    "closed_loop": {"name": "Closed-Loop Life Support", "science": 32, "credits": 34, "turns": 3, "requires": ["robotics"], "description": "Reduces crew consumption of water and oxygen."},
-    "autonomy": {"name": "Autonomous Operations", "science": 26, "credits": 26, "turns": 2, "requires": ["robotics"], "description": "Two more standing-order slots for every base."},
+    "closed_loop": {"name": "Closed-Loop Life Support", "science": 32, "credits": 34, "turns": 3, "requires": ["surveying"], "description": "Reduces crew consumption of water and oxygen."},
+    "autonomy": {"name": "Autonomous Operations", "science": 26, "credits": 26, "turns": 2, "requires": ["surveying"], "description": "Two more standing-order slots for every base."},
 }
 
 RESOURCE_KEYS = ("energy", "materials", "fuel", "water", "food", "oxygen", "heat")
@@ -170,7 +171,7 @@ FORECAST_LEAD = 2       # turns of warning before a hazard strikes
 PREPARE_COST = 8        # materials to prepare a hub manually (must be ordered a turn ahead)
 
 # Building wear per turn (condition points) by world; shields halve it.
-WEAR = {"mars": 2, "venus": 5, "mercury": 4, "europa": 3}
+WEAR = {"earth": 2, "mars": 2, "venus": 5, "mercury": 4, "europa": 3}
 REPAIR_COST = 10
 DARK_TURNS_TO_LOSE = 3
 
@@ -219,7 +220,10 @@ def campaign_catalog() -> dict:
     """Catalog plus the V3 flight, fault and programme tables."""
     from .fault_data import FAULT_COMPUTERS, FAULT_EXAMPLE_RULES, FAULT_INSTRUMENTS, FAULT_RESPONSES, FAULT_SENSORS, FAULT_SCENARIOS
     from .flight import PROPELLANT_MAX_KG, table
+    from .surface import BIOMES, landscape
     base = catalog()
+    base["biomes"] = BIOMES
+    base["surfacePreviews"] = {w: [{"biome": b, "elevation": e} for b, e in landscape("ORBITAL", w, "Preview")] for w in WORLDS}
     base.update({
         "physics": PHYSICS, "turnDays": TURN_DAYS, "campaignStart": CAMPAIGN_START, "fuelUnitKg": FUEL_UNIT_KG,
         "vehicles": LAUNCH_VEHICLES, "assist": ASSIST,

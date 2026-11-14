@@ -87,7 +87,7 @@ export function programView({catalog, state, date}) {
 export function guideSteps(state, defaults) {
   const softwareChanged = JSON.stringify(state.software) !== JSON.stringify(defaults.software);
   return [
-    {done: state.turn > 1 || state.missions.length > 0 || state.hubs[1].tiles.filter(t => t.revealed).length > 9, text: 'Click fogged tiles around Arcadia to scan them for free.', action: null},
+    {done: state.turn > 1 || state.missions.length > 0 || state.hubs[1].tiles.filter(t => t.revealed).length > 9, text: 'Select an unsurveyed sector near Arcadia, then choose Scan Sector for free.', action: null},
     {done: softwareChanged, text: 'Open SOFTWARE, run the lab test and fix the flight rules that fail.', action: 'software'},
     {done: JSON.stringify(state.orders) !== JSON.stringify(defaults.orders), text: 'Write standing orders so bases survive storms on their own.', action: 'software'},
     {done: state.missions.length > 0, text: 'In the SHIPYARD, wait for a good launch window and make every check green.', action: 'planner'},
