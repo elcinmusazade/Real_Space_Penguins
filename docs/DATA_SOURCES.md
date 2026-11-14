@@ -14,6 +14,10 @@ Verified primary-source pages on **2026-11-13**. The application currently uses 
 
 **None.** The game's terrain, resources, crops, timing, and scenarios are authored or seed-generated game content. Do not claim live NASA data, realistic crop growth, or engineering certification.
 
+**Campaign V2 extension (2026-11-14):** The Venus, Mercury, and Europa locations and broad environment descriptions are educational flavor; their hazard chances, transfer turn counts, fuel coefficients, ship masses, and construction yields in `ares/campaign_data.py` are **authored game assumptions**. Europa is a Jovian moon. The player has not yet supplied GMAT trajectory outputs, so no mission route in V2 is claimed to be a computed or verified trajectory. When GMAT files arrive, document inputs, epoch, coordinate frame, spacecraft parameters, solver configuration, units, and numerical results before integrating them.
+
+**Map-first V3 presentation (2026-11-14):** All 32×32 surface maps and decorative crater/ridge colors in `web/planet-map.js` are stylized, seeded **fictional game terrain**. They are not derived from NASA planetary elevation rasters, scientific maps, or planetary imagery. Hidden terrain decorations are cosmetic and independent of authoritative Python resource types until exploration reveals them.
+
 ## If adding real data later
 
 Record its dataset/version, exact query, location, time range, units, retrieval date, processing, missing-data behavior, and attribution/reuse terms. Keep the original data distinct from transformed game values. NASA Earth observations must not silently become Martian observations.

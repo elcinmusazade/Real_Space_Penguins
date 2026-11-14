@@ -11,11 +11,13 @@ This file is the standing workflow for **ChatGPT/Codex, Claude, and human teamma
 
 ## Non-negotiable implementation boundaries
 
-- **Python is authoritative.** `ares/engine.py` computes **all state changes**, turn resolution, science, resources, and events. `ares/rules.py` owns constants. `ares/server.py` exposes the API.
-- The browser never mutates game state directly. `web/bridge.js` forwards each state-changing action to `/api/action`; `/api/new` creates missions.
-- `web/engine-view.js` is a compatibility copy used **only for read-only labels, tile construction previews, and forecasts** while the existing browser artwork/UI is reused. Its exported mutation functions exist in the source but **must not be called or extended**. All state changes travel through `web/bridge.js` to Python. For gameplay changes, keep JS read-only projections consistent with Python, or deliberately replace them with Python-backed queries.
+- **Python is authoritative in both modes.** The default **interplanetary campaign V2** uses `ares/campaign.py` and `ares/campaign_data.py`; the original **classic Mars V1** uses `ares/engine.py` and `ares/rules.py`. `ares/server.py` serves both separate APIs.
+- The browser never changes authoritative game state directly. `web/campaign.js` submits V2 commands to `/api/campaign/action`, quotes to `/api/campaign/quote`, and reads catalog data from `/api/campaign/catalog`.
+- Legacy V1 uses `web/app.js` and `web/bridge.js` to submit commands through `/api/action`. `web/engine-view.js` contains legacy **read-only UI projections**; do not call its mutating functions or extend them. Changes to one mode must not silently break the other.
 - Keep saves JSON-serializable, seeded maps deterministic, game mechanics internally consistent, and bad requests handled safely.
-- Preserve the user's chosen turn-based 2-action/Sol hybrid, 6×6 fog-of-war colony map, **instant tile discovery**, building adjacency, and next-Sol construction activation unless the user explicitly changes the design.
+- **Campaign confirmed design:** Turn-based strategy with **no action points**; free instant scans near buildings, longer rover expeditions revealing 3×3 areas; **32×32 maps at each surface hub**, with full-screen isometric canvas, pan/zoom, and each planet's own terrain; building connectivity/cost/time; modular spacecraft and mission/trajectory planning; Earth Mission Control; multiple surface hubs on a world; orbital stations; **separate hub stockpiles with delayed, paid ship/convoy shipments**; Mars, Venus, Mercury, and Europa. AURA's intro appears on load. Do not reintroduce AP.
+- **V1 classic only:** Preserve its existing 2-action/Sol, 6×6 map, instant tile discovery, adjacency, and next-Sol construction behavior unless explicitly changing the classic mode.
+- The trajectories in V2 are **game estimates**. The user plans to supply GMAT inputs; do not present the current fuel/time/risk model as validated orbital mechanics. Europa is a moon of Jupiter, not a planet.
 - Don't represent fictional game coefficients, seeded terrain, or crop choices as real NASA measurements or recommendations. No live LLM, API key, external service, or paid integration is authorized by default.
 - Do not overwrite, redeploy, or alter the older JavaScript Site from this Python repository without an explicit instruction.
 

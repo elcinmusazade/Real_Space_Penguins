@@ -6,11 +6,15 @@
 
 Build turn-based hybrid strategy with an interactive colony, hidden terrain, and instant discovery. Do not replace instant scanning with manual rover movement or real-time timers.
 
+**V2 extension (2026-11-14):** Instant **nearby** scans remain free. Distant surveys are rover expeditions that take time and resources, with the actual tile revealed when the rover arrives. The user explicitly removed V2 action-point limits; Classic V1 retains them.
+
 ## D-002 — One small but complete mission
 
 **Status:** First-version implementation choice. **Date:** 2026-11-13.
 
 Use one Mars map, 10 Sols, two actions per Sol, and transparent science/survival goals. This keeps the full mission loop achievable for a two-person team. Grid size, costs, and targets are tunable game values, not validated NASA specifications.
+
+**Historical:** This applies to Classic V1, **not** the default open-ended interplanetary campaign.
 
 ## D-003 — Original static browser game with separated simulation
 
@@ -53,4 +57,24 @@ The tile inspector, forecast, and end-of-Sol resolution share the same allocatio
 Port simulation state transitions, events, validation, and Sol resolution into Python's standard library. Reuse the original illustrated browser UI, but forward all mutating actions through an HTTP bridge to Python. Keep the legacy JS engine only as read-only UI projections; never let it execute gameplay transitions. Preserve seeded-map and save-state compatibility, and verify parity against the original edition.
 
 Keep the previously existing static JavaScript Site unaffected. A separate process-capable host would be needed to publicly deploy this Python edition. This choice does **not** add a live AI service or NASA data feed.
+
+## D-009 — User-selected AP-free interplanetary campaign
+
+**Status:** Implemented as separate Campaign V2. **Date:** 2026-11-14.
+
+User requested spacecraft and mission design, a much larger playable network, multiple hubs **on the same planet** plus orbital stations, physical ship/convoy resource transfer, and missions to **Venus, Mercury, and Europa** as well as Mars. Ship hull/propulsion/trajectory/payload trade-offs affect estimated mass, risk, cost, and travel time. Separate hub stockpiles are never automatically pooled. Freight dispatch consumes source resources and takes turns, establishing reusable routes upon delivery; a first shipment is permitted to **open** the route. No action points limit orders; available assets, time, construction site validity, and resources are the constraints.
+
+Retain the small Classic V1 unchanged. V2 must have its own state schema, JSON endpoints, browser save key, and tests so the two modes do not interfere.
+
+## D-010 — Authored onboarding and provisional mission science
+
+**Status:** Implemented with explicit limits. **Date:** 2026-11-14.
+
+An AURA introduction opens on each load, with context-aware authored help for ship design, exploration, life support, and cargo. It does **not** call an LLM; adding model inference requires a later explicit integration decision. The player will supply **GMAT data** later; until then, all trajectory durations, fuel requirements, risks, and solar/production coefficients are labeled **illustrative game parameters**. Europa is accurately labeled Jupiter's moon; robotic outposts on extreme worlds avoid assuming viable crewed Venus surfaces.
+
+## D-011 — Map-first interplanetary campaign
+
+**Status:** Implemented as UI V3 atop Python Campaign V2. **Date:** 2026-11-14. **Reason:** The user explicitly said the dashboard looked like a website and wanted big game maps on other planets too.
+
+Make a **32×32 interactive isometric world map the primary screen**, not a tabular overview. Every separate surface hub has its own map; Mars, Venus, Mercury, and Europa use distinct palettes and surface details. Show planets without outposts as cosmetic remote previews with a landing-mission action. Allow drag/zoom, minimap recenter, sector selection, immediate scans close to buildings, resource/time-gated rovers that chart small areas, and direct connected construction. Existing mission planning, logistics, research and AURA remain available as in-game overlays. Preserve Classic V1 unchanged and migrate 5×5 Campaign V2 saves to 32×32 without dropping buildings or in-flight rover targets. Cosmetic rendering is not NASA terrain data.
 

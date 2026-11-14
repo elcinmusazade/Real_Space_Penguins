@@ -1,57 +1,61 @@
-# Ares: First Light — Python Edition
+# Ares: First Light — Python Interplanetary Command
 
-A complete, locally playable turn-based Mars exploration and colony-survival **web game**, built for a two-person NASA Space Apps team. Python controls all game-state changes; a browser supplies the illustrated interactive interface.
+An interactive, turn-based, **Python-powered web strategy game** for a two-person NASA Space Apps team. Design spacecraft, plan missions, establish outposts, survive environmental challenges, and create a connected supply network across **Mars, Venus, Mercury, and Europa** (Jupiter's moon).
 
-## Run the game
+## Run
 
-Requires **Python 3.10 or newer**. No package installation, API key, database, or Node.js is required to play.
-
-From this folder:
+Requires **Python 3.10+**. No pip installation, API keys, database, or Node.js required to play.
 
 ```bash
 python3 -m ares.server
 ```
 
-Open **http://127.0.0.1:8000** in a browser. To choose a different port, run `python3 -m ares.server --port 8080`. Keep the terminal open while playing; press Ctrl+C to stop the server. Do **not** open `web/index.html` directly—the game needs the Python API.
+Open **http://127.0.0.1:8000**. Keep the terminal open. Change port with `--port 8080`. The HTML file cannot be opened directly because Python operates the game rules.
 
-## Play
+- `/` — **Map-first Interplanetary Campaign V3 UI** (same Python Campaign V2 simulation)
+- `/classic.html` — preserved **Classic Mars V1** (10-Sol survival game)
 
-1. Choose your launch cargo and start a mission.
-2. Click an unexplored frontier tile to reveal its terrain instantly.
-3. Select a building, then click a valid revealed adjacent tile to construct it. New buildings activate the following Sol.
-4. Spend up to **two actions per Sol** on scanning, building, studying, upgrading, or other available choices.
-5. Use **End Sol** to run production and crew consumption. Resolve mission events and survive through Sol 10 while gathering **70 science**.
+## Campaign controls
 
-The 6×6 Mars sector, energy/oxygen/water/food/materials, weather, research, and events are governed by a repeatable seeded simulation. Game values are **educational simplifications**, not NASA operational calculations. The terrain is illustrative, not a downloaded NASA landing-site map.
+1. **AURA briefing:** On every page load, the offline mission assistant explains the loop. It also offers help topics throughout play.
+2. **Mission Designer:** Choose departure hub, target world, surface/orbital/science mission, landing site, ship hull, engine, trajectory, and modular payload. Python calculates *estimated* mass, materials, fuel, travel turns, cost, and risk before launch.
+3. **Planetary maps:** Mars, Venus, Mercury, and Europa each have a huge **32×32 (1,024-sector) isometric map**. Each established surface hub gets a separate playable map for its landing site. Drag to pan, wheel to zoom, use the minimap to recenter, and choose another planet from the left rail. Before landing, see a cosmetic planetary preview and open the Shipyard to establish a new base. Click unexplored tiles near facilities for **instant free scans**; distant tiles send a time-delayed rover revealing a 3×3 area. Choose a facility in the bottom build bar and click a revealed adjacent tile to construct it. Other hubs can be selected from the site chips.
+4. **Logistics:** Dispatch real cargo between any two established hubs. The source loses resources immediately; the destination gains them **after the vessel/convoy arrives**. The first delivery establishes a reusable route. Surface and orbital hubs are separate inventories; no teleportation.
+5. **Research:** Spend science and credits on a branching technology tree. **Advance Turn** runs facility production, consumption, ship arrivals, expedition results, cargo delivery, research, and hazards.
+6. **Expand:** Multiple surface sites and an orbital hub can coexist per world. Reach Venus, Mercury, and Europa to earn the System Pathfinder milestone.
 
-The browser automatically stores progress in its local storage. No account or cloud save is provided. Seeds let you replay the same starting terrain.
+**There are no action points in the interplanetary campaign.** Orders are limited by available assets, resources, valid sites, active rovers, and the time required for travel or construction. The classic Mars mode retains its separate two-actions-per-Sol rules.
+
+## Design boundaries
+
+Spacecraft trajectories, hazards, yields, risk percentages, and transit durations are **illustrative game values**, **not** orbital calculations or NASA measurements. The team intends to provide **GMAT inputs later**. AURA is an authored state-aware offline guide, **not** a live language model. No NASA endorsement or public Python deployment is claimed. Browser saves use local storage; they are not accounts or secure multiplayer records.
 
 ## Tests
 
 ```bash
 python3 -m unittest discover -s tests -v
+python3 -m compileall -q ares
+node --check web/campaign.js  # optional Node syntax check
+node --check web/planet-map.js
+node --check web/map-ui.js
 ```
 
-The tests exercise the Python engine, complete ten-Sol missions, save validation, and live HTTP endpoints. A JavaScript/Python compatibility test runs additionally when Node.js is installed; it is optional.
+## Code map
 
-## Project map
-
-| Path | Purpose |
+| Path | Responsibility |
 | --- | --- |
-| `ares/engine.py` | **Authoritative Python game rules and state transitions** |
-| `ares/rules.py` | Game constants, terrain, buildings, cargo, events, research |
-| `ares/server.py` | Dependency-free HTTP server and JSON action API |
-| `web/app.js` | Browser screens, actions, event dialogs, local saves |
-| `web/bridge.js` | Sends **every state-changing command** to Python |
-| `web/engine-view.js` | Legacy JS read-only view helpers; **do not call its mutating functions** |
-| `web/art.js`, `web/styles.css` | Original illustrated interface and styles |
-| `web/science.js` | Educational notes, sources, and disclaimers |
-| `tests/` | Automated regression and server checks |
-| `AGENTS.md`, `CLAUDE.md`, `docs/` | **Living cross-agent guidebook** and change history |
+| `ares/campaign.py`, `ares/campaign_data.py` | Authoritative V2 rules and editable game catalogs |
+| `web/index.html`, `web/campaign.js`, `web/campaign.css` | Campaign interface, mission designer, and local saves |
+| `web/map-ui.js`, `web/map-game.css`, `web/planet-map.js` | Map-first in-game HUD, presentation, and draggable/zoomable isometric canvas |
+| `ares/engine.py`, `ares/rules.py` | Preserved classic Mars V1 rules |
+| `web/classic.html`, `web/app.js`, `web/bridge.js` | Preserved V1 browser game and Python bridge |
+| `web/engine-view.js`, `web/art.js`, `web/styles.css`, `web/science.js` | Legacy V1 read-only projections, art, theme, education |
+| `ares/server.py` | Python HTTP server, static assets, distinct versioned game APIs |
+| `tests/` | Campaign, classic, JavaScript parity, and live HTTP tests |
+| `AGENTS.md`, `CLAUDE.md`, `docs/` | Cross-assistant **living guidebook** and change records |
 
-## Working with ChatGPT and Claude
+## Team handoff
 
-Start a new coding chat with: “Read `AGENTS.md` and `docs/START_HERE.md` before editing anything.” Both assistants must update `docs/STATUS.md` and add a new dated file in `docs/changes/` after any meaningful modification, recording the actual changes, reasoning, checks, and limitations. See `docs/PROMPTS.md` for copyable handoff prompts.
+Start a fresh ChatGPT or Claude coding chat with: **“Read `AGENTS.md` and `docs/START_HERE.md` before editing. Implement my task in Campaign V2 unless I explicitly say Classic. Run tests, update `docs/STATUS.md`, and add a dated `docs/changes/` entry.”**
 
-This Python edition is a separate project. It does **not** modify or replace the existing JavaScript edition. Python requires a Python-capable host for public deployment; a static-only site host cannot run `ares.server`. No public deployment of this edition is claimed.
-# Real_Space_Penguins
+The guidebook explains what is implemented, what is provisional, and why each major design decision was made. See `docs/PROMPTS.md` for copyable prompts.

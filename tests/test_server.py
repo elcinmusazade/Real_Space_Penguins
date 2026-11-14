@@ -33,10 +33,24 @@ class ServerTests(unittest.TestCase):
         except HTTPError as error:
             return error.code, error.headers.get_content_type(), error.read()
 
-    def test_serves_html_and_python_bridge(self):
+    def test_serves_campaign_and_preserves_classic_game(self):
         status, mime, html = self.request("/")
         self.assertEqual((status, mime), (200, "text/html"))
-        self.assertIn(b"app.js", html)
+        self.assertIn(b"campaign.js", html)
+        self.assertIn(b"map-game.css", html)
+        status, mime, js = self.request("/campaign.js")
+        self.assertEqual((status, mime), (200, "text/javascript"))
+        self.assertIn(b"/api/campaign/quote", js)
+        status, mime, css = self.request("/campaign.css")
+        self.assertEqual((status, mime), (200, "text/css"))
+        self.assertIn(b".terrain-map", css)
+        for path, expected_type in (("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css")):
+            code, kind, body = self.request(path)
+            self.assertEqual((code,kind),(200,expected_type))
+            self.assertGreater(len(body),100)
+        status, mime, classic = self.request("/classic.html")
+        self.assertEqual((status, mime), (200, "text/html"))
+        self.assertIn(b"app.js", classic)
         status, mime, js = self.request("/app.js")
         self.assertEqual((status, mime), (200, "text/javascript"))
         self.assertIn(b"./bridge.js", js)
@@ -45,6 +59,53 @@ class ServerTests(unittest.TestCase):
         status, _, raw = self.request("/api/health")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(raw)["engine"], "python")
+        self.assertTrue(json.loads(raw)["campaign"])
+
+    def test_campaign_launch_and_transit_over_http(self):
+        status, _, raw = self.request("/api/campaign/catalog")
+        self.assertEqual(status, 200)
+        self.assertIn("europa", json.loads(raw)["catalog"]["worlds"])
+        self.assertEqual(json.loads(raw)["catalog"]["mapSize"],32)
+        status, _, raw = self.request("/api/campaign/new", {"seed": "HTTP-V2"})
+        self.assertEqual(status, 200)
+        state = json.loads(raw)["state"]
+        self.assertEqual(state["turn"], 1)
+        design = {
+            "source": "H1", "destination": "venus", "objective": "surface",
+            "site": "Ishtar Terra", "hull": "lander", "engine": "chemical",
+            "trajectory": "balanced", "payload": ["rover", "lab", "shield"],
+        }
+        status, _, raw = self.request("/api/campaign/quote", {"state": state, "design": design})
+        self.assertEqual(status, 200)
+        quote = json.loads(raw)
+        self.assertTrue(quote["ok"])
+        self.assertTrue(quote["affordable"])
+        status, _, raw = self.request("/api/campaign/action", {"state": state, "action": "launch", "args": {"design": design}})
+        self.assertEqual(status, 200)
+        result = json.loads(raw)
+        self.assertTrue(result["ok"])
+        state = result["state"]
+        self.assertEqual(len(state["missions"]), 1)
+        self.assertEqual(state["missions"][0]["status"], "in_flight")
+        for _ in range(quote["turns"]):
+            status, _, raw = self.request("/api/campaign/action", {"state": state, "action": "advance", "args": {}})
+            self.assertEqual(status, 200)
+            state = json.loads(raw)["state"]
+        self.assertIn("venus", state["visitedWorlds"])
+        self.assertTrue(any(h["world"] == "venus" and h["kind"] == "surface" for h in state["hubs"]))
+        status, _, raw = self.request("/api/campaign/validate", {"state": state})
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(raw)["ok"])
+
+    def test_campaign_rejects_bad_design_and_invalid_save(self):
+        state = json.loads(self.request("/api/campaign/new", {"seed": "HTTP-INVALID"})[2])["state"]
+        status, _, raw = self.request("/api/campaign/quote", {"state": state, "design": {"destination": [], "payload": [{"x": 1}]}})
+        self.assertEqual(status, 200)
+        self.assertFalse(json.loads(raw)["ok"])
+        state["hubs"][0]["stocks"]["fuel"] = -100
+        status, _, raw = self.request("/api/campaign/validate", {"state": state})
+        self.assertEqual(status, 400)
+        self.assertFalse(json.loads(raw)["ok"])
 
     def test_create_scan_and_validate_game(self):
         status, _, raw = self.request("/api/new", {"seed": "PY-TEST", "loadout": ["supplies", "materials", "battery"]})

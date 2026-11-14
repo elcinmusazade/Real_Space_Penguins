@@ -15,20 +15,27 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__
-from . import engine
+from . import engine, campaign
+from .campaign_data import catalog as campaign_catalog
 
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 STATIC_TYPES = {
     "index.html": "text/html; charset=utf-8",
+    "classic.html": "text/html; charset=utf-8",
     "app.js": "text/javascript; charset=utf-8",
+    "campaign.js": "text/javascript; charset=utf-8",
+    "campaign.css": "text/css; charset=utf-8",
+    "map-game.css": "text/css; charset=utf-8",
+    "planet-map.js": "text/javascript; charset=utf-8",
+    "map-ui.js": "text/javascript; charset=utf-8",
     "bridge.js": "text/javascript; charset=utf-8",
     "engine-view.js": "text/javascript; charset=utf-8",
     "art.js": "text/javascript; charset=utf-8",
     "science.js": "text/javascript; charset=utf-8",
     "styles.css": "text/css; charset=utf-8",
 }
-MAX_BODY = 300_000
+MAX_BODY = 4_000_000
 
 
 class GameHandler(BaseHTTPRequestHandler):
@@ -49,7 +56,10 @@ class GameHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
         if path == "/api/health":
-            self._json({"ok": True, "engine": "python", "version": __version__})
+            self._json({"ok": True, "engine": "python", "version": __version__, "campaign": True})
+            return
+        if path == "/api/campaign/catalog":
+            self._json({"ok": True, "catalog": campaign_catalog()})
             return
         name = "index.html" if path == "/" else path.lstrip("/")
         if name not in STATIC_TYPES:
@@ -59,7 +69,7 @@ class GameHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ("/api/new", "/api/action", "/api/validate"):
+        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate"):
             self._json({"ok": False, "error": "Unknown endpoint."}, HTTPStatus.NOT_FOUND)
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -80,6 +90,31 @@ class GameHandler(BaseHTTPRequestHandler):
             return
         if not isinstance(payload, dict):
             self._json({"ok": False, "error": "Expected a JSON object."}, HTTPStatus.BAD_REQUEST)
+            return
+        if path.startswith("/api/campaign/"):
+            if path == "/api/campaign/new":
+                try:
+                    state = campaign.create_campaign(payload.get("seed", "HORIZON-01"))
+                except (ValueError, TypeError) as exc:
+                    self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    return
+                self._json({"ok": True, "state": state})
+                return
+            checked = campaign.validate(payload.get("state"))
+            if not checked["ok"]:
+                self._json(checked, HTTPStatus.BAD_REQUEST)
+                return
+            if path == "/api/campaign/validate":
+                self._json(checked)
+                return
+            if path == "/api/campaign/quote":
+                self._json(campaign.mission_quote(checked["state"], payload.get("design")))
+                return
+            command = payload.get("action")
+            if not isinstance(command, str):
+                self._json({"ok": False, "error": "Invalid campaign action."}, HTTPStatus.BAD_REQUEST)
+                return
+            self._json(campaign.execute(checked["state"], command, payload.get("args", {})))
             return
         if path == "/api/new":
             seed, loadout = payload.get("seed", "ARES-01"), payload.get("loadout", list(engine.DEFAULT_LOADOUT))
