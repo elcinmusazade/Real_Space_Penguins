@@ -203,3 +203,7 @@ The player requested a more melodic, wistful soundtrack and found the layered ar
 ## D-026 — Existing recordings for the planetary soundtrack
 
 The player requested music from the internet after hearing the generated themes. The game uses one complete, licensed recording per world. After finding the Mars jazz theme too aggressive, the player asked for quiet village music during construction. Mars uses Stefan Grossmann’s *Peaceful Village* from OpenGameArt, with a −28 LUFS target. The eight other recordings come from Wikimedia Commons. A constant gain adjustment suits background playback while preserving the musician’s phrasing and dynamics. Settings links to the original recordings and their licenses.
+
+## D-027 — Gemini campaign chat
+
+The player requested JARVIS through Gemini’s free tier. The game host calls Gemini 3.1 Flash-Lite when the player asks a question. It keeps the API key on the host, summarizes visible campaign progress, and gives the model a read-only role. A missing key or exhausted quota is reported in the chat. Gameplay is independent of the service.

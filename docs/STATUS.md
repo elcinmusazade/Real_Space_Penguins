@@ -4,6 +4,8 @@
 
 ## Built
 
+- **JARVIS campaign chat.** The lower-right JARVIS button opens a conversation about the current campaign with Gemini 3.1 Flash-Lite. [Change log](changes/2026-11-15-jarvis-gemini.md)
+
 - **Earth tutorial, step 29.** Adding a flight rule moves the spotlight onto its editable block. **Set it up for me** creates or fills the hurricane rule in the Earth draft. The next step guides the player through the lab test and save. [Change log](changes/2026-11-15-earth-tutorial-rule.md)
 
 - **Campaign trailer, 2026-11-15.** The revised 30-second trailer shows Mars HQ expanding from two facilities to seven, the rotating solar system and a Horizon Lander being refitted and launched. Saved in Downloads as `ares-first-light-expansion-and-refit.mp4`. [Revised cut](changes/2026-11-15-expansion-and-refit-trailer.md) · [Original cut](changes/2026-11-15-campaign-trailer.md)
@@ -44,6 +46,8 @@
 - **Outer-planet maps (2026-11-15):** Jupiter, Saturn, Uranus and Neptune now have distinct animated 96×96 cloud maps, three deployment zones each, surveys/construction, local production, hazards and delayed supplies. Preview immediately; deploy only after Deep-Space Engineering research and an arriving shielded survey platform. No free hubs or save reset. New routes, capture/launch allowances and marked light-times are game estimates; the existing four-destination GMAT table is unchanged.
 
 ## Observed checks
+
+- **JARVIS with Gemini.** 175 tests ran with one optional skip. Verified the setup prompt and retry control in the game. Two independent players received live replies for their own campaigns through the host’s configured key.
 
 - First-visit tutorial, 2026-11-15. A fresh browser session opened the welcome step, resumed step two after reload and kept the card closed after dismissal. Settings showed Resume. The full suite passed 166 tests, with one optional GMAT check skipped.
 

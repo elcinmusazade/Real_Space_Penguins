@@ -4,6 +4,7 @@ from http.server import ThreadingHTTPServer
 import json
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -78,6 +79,19 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertTrue(result["items"])
         self.assertEqual(self.request("/api/campaign/advice", {"state": {"version": 1}})[0], 400)
+
+    @patch("ares.jarvis._generate", return_value={"kind":"answer", "text":"Your headquarters is on Mars."})
+    def test_jarvis_route_validates_campaign_and_serves_chat_assets(self, generate):
+        for path, mime in (("/jarvis.js", "text/javascript"), ("/jarvis.css", "text/css")):
+            self.assertEqual(self.request(path)[:2], (200, mime))
+        state = campaign.create_campaign("HTTP-JARVIS")
+        payload = {"state": state, "question": "Where is HQ?"}
+        status, _, body = self.request("/api/campaign/jarvis", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"ok": True, "reply": "Your headquarters is on Mars.", "turn": 1})
+        self.assertEqual(self.request("/api/campaign/jarvis", {**payload, "question": ""})[0], 400)
+        self.assertEqual(self.request("/api/campaign/jarvis", {**payload, "state": {}})[0], 400)
+        generate.assert_called_once()
 
     def test_surface_inspection_endpoint_reports_costs_without_changing_save(self):
         state = json.loads(self.request("/api/campaign/new", {"seed":"COAST"})[2])["state"]

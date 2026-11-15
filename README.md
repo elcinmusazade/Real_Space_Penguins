@@ -17,6 +17,16 @@ Open **http://127.0.0.1:8000**. Keep the terminal open. Change port with `--port
 
 Existing saves retain their hubs and progress. To use the Mars-only beginning with no Earth hub, select **↻ New campaign → Start on Mars**; this replaces the current save.
 
+## JARVIS campaign chat
+
+Open **JARVIS** in the lower-right corner of the campaign and ask a question. It reads your current turn, resources, bases, missions, research and active tutorial step. You can ask follow-up questions as you play. Starting a new campaign or reloading the page clears the conversation.
+
+JARVIS uses Gemini 3.1 Flash-Lite. Create a Gemini API key in a Google AI Studio project on the **Free** tier. Billing and quota follow the project that owns the key. [Get a key](https://aistudio.google.com/apikey) · [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite)
+
+From the game directory, run `python3 -m ares.jarvis --setup` and enter the key at the hidden prompt. The running game reads it on the next question. Servers can also set `GEMINI_API_KEY` in their environment. Everyone playing at the same server address shares the host’s Gemini quota. Players use their own campaign saves and can open JARVIS immediately. A separate installation starts a separate server. The private setup file is under `~/.config/ares-first-light/gemini-key`.
+
+Each question sends Google the recent conversation and a summary of visible campaign progress. Google’s free-tier data terms apply. AURA and the rest of the game work offline.
+
 ## AURA advisor
 
 Press **✺** (top right) for AURA's advice. It lists what needs your attention right now, most urgent first: supplies that will run out (projected by simulating the next turn), crew health, hazards you can still prepare for, worn buildings, flight software that fails the lab test, cheap Earth launch windows, goal deadlines, idle research. Every item has a button that takes you to the fix. A red badge on ✺ means something urgent or a warning is waiting. Topic explanations and the welcome briefing are in the same panel. AURA is computed from the game rules, offline; it is not a live AI.

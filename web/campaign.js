@@ -6,7 +6,7 @@ import {solarSystemView,mountSolarSystem} from './solar-system.js';
 import {softwareView, programView, softwareConfig, ordersConfig, guideSteps} from './program-ui.js';
 import {applyRuleAction, applyRuleField} from './rule-editor.js';
 import {playLaunch, playArrival} from './flight-view.js';
-import {createTutorial, settingsView} from './tutorial.js';
+import {createTutorial, settingsView, STEPS} from './tutorial.js';
 import {advisorView, badgeCount} from './advisor.js';
 import {createPlanetMusic} from './planet-music.js';
 import {mountShip3d} from './ship-view.js';
@@ -39,6 +39,7 @@ const GUIDE_KEY='ares.first-light.guide-hidden';
 try{guideHidden=localStorage.getItem(GUIDE_KEY)==='1';}catch{/* storage unavailable */}
 let freight={source:'H1',target:'',resource:'materials',amount:20};
 let tutorial=null;
+let jarvis=null;
 let renderedTab=null; // tab shown by the previous render, so scroll survives redraws of the same screen
 let advice=null, adviceState=null, adviceRequest=0, adviceTopic='basics';
 
@@ -77,7 +78,28 @@ async function initialize() {
     tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection(),draft,softwareTab,softwareDraft,addedRule,
       softwareSlots:catalog.computers[softwareDraft.computer].slots,earthLabPassed:softwareTab==='earth'&&softwareTest?.results?.length>0&&softwareTest.passed===softwareTest.results.length,dirtySoftware:!same(softwareDraft,savedSoftware())}),{suggest:suggestTile,answer:applyAnswer,firstVisit:!previous});
     await save(); render();
+    // The map can still open while a running server is being upgraded.
+    import('./jarvis.js').then(({mountJarvis})=>{
+      jarvis=mountJarvis(document.querySelector('#jarvis'), jarvisContext);
+      jarvis.sync(state.turn, Boolean(modal||solarOpen));
+    }).catch(error=>console.warn('JARVIS could not open.', error));
   }catch(error){app.innerHTML=`<main class="error-page"><h1>Mission engine unavailable</h1><p>${esc(error.message)}</p><p>Run <code>python3 -m ares.server</code> from the project directory.</p><button onclick="location.reload()">Retry connection</button></main>`;}
+}
+
+function jarvisContext() {
+  const progress=tutorial.progress();
+  const lesson=progress.status==='active' ? STEPS[progress.step] : null;
+  const view={tab, world:selectedWorld, hub:selectedHub};
+  if(tab==='system') { view.tile=selectedTile; view.building=selectedBuilding; }
+  if(tab==='planner') {
+    view.destination=draft.destination;
+    view.ship=[draft.objective,draft.site,draft.hull,draft.engine,draft.trajectory,...draft.payload].join(', ');
+    if(quote?.ok)view.quote=`Arrival turn ${quote.arrivalTurn}, ${quote.turns} turns in flight. Launch costs ${quote.credits} credits, ${quote.fuel} fuel and ${quote.materials} materials.`;
+    view.launchChecks=quote?.checks?.map(c=>c.label+' — '+c.detail).join('\n') || quote?.error || '';
+  }
+  if(tab==='software')view.softwareWorld=softwareTab;
+  if(lesson)view.tutorial=`Step ${progress.step+1}: ${lesson.title}. ${lesson.body.replace(/<[^>]+>/g,' ')}`;
+  return {state,view};
 }
 
 function hub(id) { return state.hubs.find(h=>h.id===id); }
@@ -343,7 +365,7 @@ function assistantMessage() {
   return topics[assistantTopic]||topics.welcome;
 }
 
-function advisor(){return `<aside class="advisor-panel"><div class="advisor-head"><span class="aura-avatar">✺</span><div><b>A.U.R.A.</b><small>MISSION CONTROL ADVISOR</small></div>${pill('GUIDANCE','green')}</div><div class="advisor-body"><div class="aura-message">${esc(assistantMessage())}</div><p class="aura-caption">Ask AURA about:</p><div class="aura-topics">${[['ships','Ship design'],['exploration','Exploration'],['logistics','Cargo routes'],['survival','Survival']].map(([key,label])=>`<button data-action="advisor-topic" data-id="${key}" class="${assistantTopic===key?'selected':''}">${label}</button>`).join('')}</div><div class="advisor-notice">ⓘ This offline guide uses authored, state-aware explanations. Live AI integration is not enabled.</div></div><button class="advisor-manual" data-action="assistant">OPEN INTRODUCTION ↗</button></aside>`;}
+function advisor(){return `<aside class="advisor-panel"><div class="advisor-head"><span class="aura-avatar">✺</span><div><b>A.U.R.A.</b><small>MISSION CONTROL ADVISOR</small></div>${pill('GUIDANCE','green')}</div><div class="advisor-body"><div class="aura-message">${esc(assistantMessage())}</div><p class="aura-caption">Ask AURA about:</p><div class="aura-topics">${[['ships','Ship design'],['exploration','Exploration'],['logistics','Cargo routes'],['survival','Survival']].map(([key,label])=>`<button data-action="advisor-topic" data-id="${key}" class="${assistantTopic===key?'selected':''}">${label}</button>`).join('')}</div><div class="advisor-notice">ⓘ AURA uses authored, state-aware guidance. Open JARVIS for campaign chat.</div></div><button class="advisor-manual" data-action="assistant">OPEN INTRODUCTION ↗</button></aside>`;}
 
 function modalMarkup(){
   if(!modal)return '';
@@ -458,6 +480,7 @@ function render(){
     refreshResearch();
   }
   tutorial?.sync();
+  jarvis?.sync(state.turn, Boolean(modal||solarOpen));
   refreshAdvice();
   if(solarOpen){
     const panel=document.querySelector('.solar-dialog');
@@ -658,7 +681,7 @@ app.addEventListener('click',async event=>{
   if(action==='settings-guide'){guideHidden=!button.checked;try{localStorage.setItem(GUIDE_KEY,guideHidden?'1':'0');}catch{/* ignore */}render();return;}
   if(action==='settings-motion'){mapMotion=button.checked;render();return;}
   if(action==='confirm-reset'){
-    try {state=(await api('/api/campaign/new',{seed:`HORIZON-${Date.now().toString(36).toUpperCase().slice(-6)}`})).state;resetDrafts();softwareTest=null;openHome();await save();render();}
+    try {state=(await api('/api/campaign/new',{seed:`HORIZON-${Date.now().toString(36).toUpperCase().slice(-6)}`})).state;jarvis?.reset();resetDrafts();softwareTest=null;openHome();await save();render();}
     catch(error){notify(error.message,true);}return;
   }
 });

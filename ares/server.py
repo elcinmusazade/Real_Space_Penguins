@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__
-from . import advice, engine, campaign, faults, research, ship
+from . import advice, engine, campaign, faults, jarvis, research, ship
 from .campaign_data import ARRIVAL_SCENARIO, PAYLOADS, PLANET_DANGERS
 from .campaign_data import WORLDS, campaign_catalog
 
@@ -46,6 +46,8 @@ STATIC_TYPES = {
     "tutorial.css": "text/css; charset=utf-8",
     "advisor.js": "text/javascript; charset=utf-8",
     "advisor.css": "text/css; charset=utf-8",
+    "jarvis.js": "text/javascript; charset=utf-8",
+    "jarvis.css": "text/css; charset=utf-8",
     "ship-view.js": "text/javascript; charset=utf-8",
     "shipyard.css": "text/css; charset=utf-8",
     "bridge.js": "text/javascript; charset=utf-8",
@@ -89,7 +91,7 @@ class GameHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test", "/api/campaign/inspect", "/api/campaign/research", "/api/campaign/advice"):
+        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test", "/api/campaign/inspect", "/api/campaign/research", "/api/campaign/advice", "/api/campaign/jarvis"):
             self._json({"ok": False, "error": "Unknown endpoint."}, HTTPStatus.NOT_FOUND)
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -147,6 +149,14 @@ class GameHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/campaign/advice":
                 self._json(advice.advise(checked["state"]))
+                return
+            if path == "/api/campaign/jarvis":
+                try:
+                    reply = jarvis.answer(checked["state"], payload)
+                except jarvis.JarvisError as error:
+                    self._json({"ok": False, "error": str(error)}, error.status)
+                    return
+                self._json(reply)
                 return
             if path == "/api/campaign/research":
                 self._json(research.inspect(checked["state"]))

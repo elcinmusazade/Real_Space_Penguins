@@ -15,10 +15,21 @@
   <link rel="stylesheet" href="./shipyard.css">
   <link rel="stylesheet" href="./solar-system.css">
   <link rel="stylesheet" href="./tech-tree.css">
+  <link rel="stylesheet" href="./jarvis.css">
 </head>
 <body>
   <div id="app"><div class="loading"><span class="loading-mark">◈</span><h1>Ares: Interplanetary Command</h1><p>Connecting to the Python mission engine…</p></div></div>
   <div id="notification-root" aria-live="polite"></div>
+  <aside id="jarvis" aria-label="JARVIS campaign assistant" hidden>
+    <button type="button" class="jarvis-launch" aria-label="Open JARVIS chat" aria-controls="jarvis-panel" aria-expanded="false"><span class="jarvis-orb" aria-hidden="true"></span>JARVIS</button>
+    <section class="jarvis-panel" id="jarvis-panel" role="dialog" aria-labelledby="jarvis-title" hidden>
+      <header class="jarvis-head"><span class="jarvis-orb" aria-hidden="true"></span><div><h2 id="jarvis-title">JARVIS</h2><small>Campaign assistant · Gemini</small></div><span class="jarvis-turn"></span><button type="button" class="jarvis-close" aria-label="Close JARVIS chat">×</button></header>
+      <div class="jarvis-intro"><p>What do you need, Commander?</p><small>Gemini receives your question, recent chat and a summary of your campaign.</small><button type="button">What should I do next?</button><button type="button">How are my supplies?</button></div>
+      <div class="jarvis-log" role="log" aria-label="Conversation" aria-live="polite"></div>
+      <p class="jarvis-status" role="status"></p><button type="button" class="jarvis-retry" hidden>Retry</button>
+      <form class="jarvis-form"><textarea rows="1" maxlength="600" aria-label="Question for JARVIS" placeholder="Ask about your campaign…"></textarea><button type="submit" aria-label="Send question" disabled>↑</button></form>
+    </section>
+  </aside>
   <script type="module" src="./campaign.js"></script>
 </body>
 </html>
