@@ -25,7 +25,7 @@ const built = h => h ? h.tiles.filter(t => t.building).length : 0;
 export const STEPS = [
   {chapter: 'Welcome', title: 'Welcome, Commander', center: true,
     body: 'You run a young space programme from <b>Mars HQ</b>. Your goals: explore and build up Mars, fly the first missions to Earth and beyond, keep your crews alive, and satisfy the review board that sets your budget every year.',
-    hint: 'This card is movable: drag it by its top bar (⠿) to anywhere it is not in the way, and it stays there. ⌖ snaps it back. Close it any time with ✕; resume or restart from ⚙ Settings.'},
+    hint: 'This card is movable: drag it by its top bar (⠿) to anywhere it is not in the way, and it stays exactly where you put it. Close it any time with ✕; resume or restart from ⚙ Settings.'},
   {chapter: 'Welcome', title: 'Time and resources', target: ['.map-resources'],
     body: 'Science pays for research, credits pay for missions, and your budget adds credits every turn. <b>NEXT TURN</b> moves the calendar forward three months: buildings produce, ships travel, hazards strike.',
     hint: 'There are no action points. Give as many orders as you like before ending the turn.'},
@@ -147,7 +147,7 @@ export function settingsView({tutorial, mapMotion, guideHidden}) {
 export function createTutorial(getContext, actions = {}) {
   let progress = loadProgress();
   let base = null, baseStep = -1, scrolledStep = -1, frame = 0, keyboard = false;
-  let userPos = null;
+  let userPos = null, dragging = false;
   try { userPos = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch { /* storage unavailable */ }
   const savePos = () => { try { userPos ? localStorage.setItem(POS_KEY, JSON.stringify(userPos)) : localStorage.removeItem(POS_KEY); } catch { /* ignore */ } };
   const root = document.createElement('div');
@@ -185,7 +185,7 @@ export function createTutorial(getContext, actions = {}) {
     const missing = !current.center && !el;
     const waiting = current.action && !missing;
     return `<div class="tut-head" data-drag><span class="tut-grip" aria-hidden="true">⠿</span><span class="tut-chapter">CHAPTER ${chapters.indexOf(current.chapter) + 1} · ${esc(current.chapter.toUpperCase())}</span>
-        ${userPos ? '<button class="tut-close" data-tut="snap" aria-label="Move the card back to its automatic position" title="Snap back">⌖</button>' : ''}<button class="tut-close" data-tut="move" aria-label="Move tutorial card with arrow keys" title="Drag the top bar, or focus here and use arrow keys">✥</button><button class="tut-close" data-tut="close" aria-label="Close tutorial">✕</button></div>
+<button class="tut-close" data-tut="move" aria-label="Move tutorial card with arrow keys" title="Drag the top bar, or focus here and use arrow keys">✥</button><button class="tut-close" data-tut="close" aria-label="Close tutorial">✕</button></div>
       <h2 id="tut-title">${esc(current.title)}</h2>
       <p class="tut-body">${current.body}</p>
       ${current.hint ? `<p class="tut-hint"><span aria-hidden="true">💡</span> ${esc(current.hint)}</p>` : ''}
@@ -215,7 +215,7 @@ export function createTutorial(getContext, actions = {}) {
     if (!el) {
       spot.style.display = 'none';
       root.classList.toggle('tut-dim', step()?.center === true || progress.status === 'offer');
-      if (userPos && progress.status === 'active' && !step().center) { pin(card); return; }
+      if (userPos) { pin(card); return; }
       card.style.left = `${Math.max(m, (vw - card.offsetWidth) / 2)}px`;
       card.style.top = `${Math.max(m, (vh - card.offsetHeight) / 2)}px`;
       return;
@@ -261,6 +261,7 @@ export function createTutorial(getContext, actions = {}) {
 
   /** Called after every campaign render and on layout changes. */
   function sync() {
+    if (dragging) return; // rebuilding now would drop the card back to its old spot
     const ctx = getContext();
     if (ctx.blocked || (progress.status !== 'active' && progress.status !== 'offer')) { root.innerHTML = ''; return; }
     if (progress.status === 'offer') {
@@ -292,7 +293,6 @@ export function createTutorial(getContext, actions = {}) {
     const what = button.dataset.tut;
     if (what === 'start') go(0);
     else if (what === 'dismiss' || what === 'close') { progress = {...progress, status: what === 'close' ? 'paused' : 'paused'}; save(); sync(); }
-    else if (what === 'snap') { userPos = null; savePos(); sync(); }
     else if (what === 'move') { /* focus target for arrow-key moves */ }
     else if (what === 'next') go(progress.step + 1);
     else if (what === 'back') go(Math.max(0, progress.step - 1));
@@ -306,8 +306,10 @@ export function createTutorial(getContext, actions = {}) {
     const dx = event.clientX - start.left, dy = event.clientY - start.top;
     head.setPointerCapture(event.pointerId);
     card.classList.add('is-dragging');
-    const move = e => { userPos = {x: e.clientX - dx, y: e.clientY - dy}; pin(card); };
+    dragging = true;
+    const move = e => { userPos = {x: e.clientX - dx, y: e.clientY - dy}; pin(card); savePos(); };
     const end = () => {
+      dragging = false;
       card.classList.remove('is-dragging');
       head.removeEventListener('pointermove', move);
       head.removeEventListener('pointerup', end);
