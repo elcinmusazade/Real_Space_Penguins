@@ -34,6 +34,8 @@
 
 ## Observed checks
 
+- 2026-11-15 branch comparison (`213fef1` vs `main` at `14b25d5`): local suite with Node available: **151 passed, 3 failed, 1 optional GMAT check skipped**. Tech-tree and surface controller harnesses reported a missing `badgeCount`; the Mars startup harness did not render its expected map. See `docs/changes/2026-11-15-shipyard-branch-comparison.md`.
+
 - Shipyard & Software rework, 2026-11-15: **155+ tests OK, 6 skipped** (Node-only). New `tests/test_ship.py` (parts, fit reasons, mass/cost, warn-only damage, per-planet rules, two dangers per planet, right rule beats no rules on every new danger, ship parts change the lab result, missing instruments have no sensors). Danger targets set halfway between "no rules" and "right rule" on a suitable ship. Browser (port 8002): part selects, ship drawing and animation, fit row, both dangers in launch checks, planet tabs, save/clear planet rules, lab test with charts and hints.
 
 - AURA advice, 2026-11-15: **142 tests run, OK, 6 skipped** (Node-only). New `tests/test_advice.py` (read-only, ordering, first steps, software, projected shortages, hazards/prepare/orders, wear, GMAT windows, goals) and an HTTP test. Browser: badge, panel, every action type opened the right screen, topic tabs, scrim/inner clicks, welcome briefing replay; advice takes about 45 ms per state.
