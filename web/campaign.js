@@ -7,6 +7,7 @@ import {softwareView, programView, softwareConfig, ordersConfig, guideSteps} fro
 import {applyRuleAction, applyRuleField} from './rule-editor.js';
 import {playLaunch, playArrival} from './flight-view.js';
 import {createTutorial, settingsView} from './tutorial.js';
+import {advisorView, badgeCount} from './advisor.js';
 
 import {loadCampaign,saveCampaign} from './campaign-save.js';
 const app = document.querySelector('#app');
@@ -32,6 +33,7 @@ const GUIDE_KEY='ares.first-light.guide-hidden';
 try{guideHidden=localStorage.getItem(GUIDE_KEY)==='1';}catch{/* storage unavailable */}
 let freight={source:'H1',target:'',resource:'materials',amount:20};
 let tutorial=null;
+let advice=null, adviceState=null, adviceRequest=0, adviceTopic='basics';
 
 async function api(path, payload) {
   const options = payload === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)};
@@ -92,7 +94,7 @@ function navButton(id,label,icon) {return `<button class="nav-item ${tab===id?'a
 function topbar() {
   return `<header class="topbar"><button class="brand" data-action="home" aria-label="Return to Mars home map"><span class="brand-mark">✦</span><span>ARES <small>INTERPLANETARY COMMAND</small></span></button>
   <nav class="topnav" aria-label="Game navigation">${navButton('system','PLANET MAP','◈')}${navButton('planner','SHIPYARD','⌁')}${navButton('hubs','OUTPOSTS','▦')}${navButton('logistics','SUPPLY LINES','⇄')}${navButton('research','TECH TREE','✧')}${navButton('software','SOFTWARE','⌬')}${navButton('program','PROGRAMME','◎')}</nav>
-  <div class="header-actions"><span class="save-status"><i></i> LOCAL SAVE</span><button class="tiny-icon" data-action="assistant" aria-label="Open mission assistant">✺</button><button class="tiny-icon" data-action="reset" aria-label="Reset campaign" title="New campaign">↻</button><button class="tiny-icon" data-action="settings-open" aria-label="Settings" title="Settings (tutorial, guide, motion)">⚙</button></div></header>`;
+  <div class="header-actions"><span class="save-status"><i></i> LOCAL SAVE</span><button class="tiny-icon aura-button" data-action="assistant" aria-label="Open AURA advisor${badgeCount(adviceState===state?advice:null)?` (${badgeCount(advice)} need attention)`:''}" title="AURA advice">✺${badgeCount(adviceState===state?advice:null)?`<span class="aura-badge">${badgeCount(advice)}</span>`:''}</button><button class="tiny-icon" data-action="reset" aria-label="Reset campaign" title="New campaign">↻</button><button class="tiny-icon" data-action="settings-open" aria-label="Settings" title="Settings (tutorial, guide, motion)">⚙</button></div></header>`;
 }
 
 function stats() {
@@ -271,6 +273,7 @@ function modalMarkup(){
   if(modal==='intro')return `<div class="modal-scrim"><section class="aura-modal" role="dialog" aria-modal="true" aria-labelledby="aura-title"><div class="modal-aura">✺</div><div class="eyebrow">A.U.R.A. · INCOMING BRIEFING</div><h2 id="aura-title">Welcome to<br><em>interplanetary command.</em></h2><p>Commander, it is ${turnDate(state.turn)}. Each turn is three months. Earth launch windows follow the planets; Mars departures use game-estimate transfers. Missions can fail, storms can kill a crew, and a review board decides your budget every year.</p><div class="intro-steps"><div><span>01</span><b>WRITE RULES</b><small>Flight software and base orders react when Mission Control is too far away.</small></div><div><span>02</span><b>FLY THE WINDOWS</b><small>Check every flight plan; supported Earth routes use GMAT-derived data.</small></div><div><span>03</span><b>KEEP THEM ALIVE</b><small>Supply, repair and prepare bases before hazards strike.</small></div></div><div class="modal-buttons"><button class="button secondary" data-action="intro-skip">EXPLORE FREELY</button><button class="button primary" data-action="intro-plan">DESIGN FIRST MISSION ↗</button></div><div class="modal-disclaimer">Earth departures to Mars, Venus, Mercury and Europa use NASA GMAT's bundled DE421 ephemeris and Atlas V 401 data, solved as Sun-only two-body transfers. Outer-planet routes and other values are labelled game estimates.</div></section></div>`;
   if(modal==='event'&&state.event)return `<div class="modal-scrim"><section class="aura-modal event-modal" role="dialog" aria-modal="true" aria-labelledby="event-title"><div class="modal-aura danger">!</div><div class="eyebrow">ENVIRONMENTAL EVENT · TURN ${fmtTurn(state.turn)}</div><h2 id="event-title">${esc(state.event.title)}</h2><p>${esc(state.event.description)}</p><div class="event-options">${state.event.choices.map(c=>`<button class="event-option" data-action="event-choice" data-id="${esc(c.id)}"><b>${esc(c.label)} →</b><span>${esc(c.description)}</span></button>`).join('')}</div></section></div>`;
   if(modal==='confirm-launch'&&quote?.ok){const failed=quote.checks.filter(c=>!c.ok);return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><div class="modal-aura danger">!</div><div class="eyebrow">LAUNCH CHECK FAILED</div><h2 id="confirm-title">This mission ${esc((outcomeText[quote.outcome]||'').toLowerCase())}.</h2><ul class="check-list">${failed.map(c=>`<li class="bad"><b>✕ ${esc(c.label)}</b><span>${esc(c.detail)}</span></li>`).join('')}</ul><p>Launching anyway spends the credits${quote.outcome==='scrub'?'; the spacecraft is returned.':quote.outcome==='stranded'?', the spacecraft and its propellant.':' and the spacecraft will not achieve its objective.'}</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">FIX THE PLAN</button><button class="button primary risky" data-action="confirm-launch">LAUNCH ANYWAY</button></div></section></div>`;}
+  if(modal==='advisor')return advisorView({advice:adviceState===state?advice:null,topic:adviceTopic});
   if(modal==='settings')return settingsView({tutorial:tutorial.progress(),mapMotion,guideHidden});
   if(modal==='reset')return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="reset-title"><div class="eyebrow">CAMPAIGN RESET</div><h2 id="reset-title">Start a new space programme?</h2><p>Begin at Mars HQ with no Earth hub. Travel to Earth and land before building there. Your current browser save will be replaced.</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">CANCEL</button><button class="button primary" data-action="confirm-reset">START ON MARS</button></div></section></div>`;
   return '';
@@ -371,12 +374,33 @@ function render(){
     refreshResearch();
   }
   tutorial?.sync();
+  refreshAdvice();
   if(solarOpen){
     const panel=document.querySelector('.solar-dialog');
     solarController=mountSolarSystem(panel,solarCamera,solarMotion);
     const restored=solarFocus&&[...panel.querySelectorAll('[data-action]')].find(el=>el.tagName===solarFocus.tag&&el.dataset.action===solarFocus.action&&el.dataset.id===solarFocus.id);
     (restored||panel.querySelector('.solar-close')).focus({preventScroll:true});
   }
+}
+
+/** Fetch AURA's advice once per game state (Python computes it from the rules). */
+async function refreshAdvice(){
+  if(!state||adviceState===state)return;
+  const snapshot=state,ticket=++adviceRequest;
+  adviceState=snapshot;advice=null;
+  try{const result=await api('/api/campaign/advice',{state:snapshot});if(ticket===adviceRequest&&snapshot===state){advice=result;render();}}
+  catch(error){if(ticket===adviceRequest&&snapshot===state){advice={ok:false,error:error.message};render();}}
+}
+
+function followAdvice(item){
+  const a=item?.action;if(!a)return;
+  modal=null;
+  if(a.type==='nav'){tab=a.tab;selectedBuilding=null;if(tab==='software')resetDrafts();render();if(tab==='planner')refreshQuote();return;}
+  if(a.type==='prepare'){render();perform('prepare',{forecast:a.forecast});return;}
+  if(a.type==='plan'){chooseDestination(a.destination);return;}
+  if(a.type==='tech'){techSelected=a.tech;tab='research';render();return;}
+  if(a.type==='hub'||a.type==='tile'){const h=hub(a.hub);if(!h){render();return;}openWorldMap(h.world,h.id);if(a.type==='tile'){selectedTile=a.tile;render();const size=catalog.mapSize||96;mapController?.centerOn(a.tile%size,Math.floor(a.tile/size));}return;}
+  render();
 }
 
 async function refreshQuote(){
@@ -489,8 +513,11 @@ app.addEventListener('click',async event=>{
   if(action==='research'){await perform('research',{tech:id});return;}
   if(action==='advance'){await perform('advance');return;}
   if(action==='event-choice'){modal=null;await perform('eventChoice',{choice:id});if(state.event)modal='event';render();return;}
-  if(action==='assistant'){modal='intro';render();return;}
-  if(action==='advisor-topic'){assistantTopic=id;render();return;}
+  if(action==='assistant'){modal='advisor';render();document.querySelector('.advisor-modal [data-action="dismiss-modal"]')?.focus();return;}
+  if(action==='advisor-topic'){adviceTopic=id;render();return;}
+  if(action==='advisor-dismiss'){if(event.target===button){modal=null;render();}return;}
+  if(action==='advisor-briefing'){modal='intro';render();return;}
+  if(action==='advice-go'){followAdvice(advice?.items?.[Number(button.dataset.index)]);return;}
   if(action==='intro-skip'){modal=state.event?'event':null;render();return;}
   if(action==='intro-plan'){modal=state.event?'event':null;tab='planner';render();refreshQuote();return;}
   if(action==='reset'){modal='reset';render();return;}

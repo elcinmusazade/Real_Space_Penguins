@@ -108,7 +108,7 @@ export const STEPS = [
     hint: 'Advanced projects need online labs or mission experience. Build a Research Lab early.'},
   {chapter: 'Programme', title: 'You are ready', center: true,
     body: 'Your first objectives: <b>grow Mars HQ</b>, <b>land on Earth</b>, <b>reach Venus</b>, and keep every crew above 70% health. After that, the whole solar system is open.',
-    hint: 'Press ✺ for AURA’s advice at any time, and ⚙ Settings to restart this tutorial.'},
+    hint: 'Press ✺ any time: AURA lists what needs your attention (a red badge means something urgent) with a button to act on each. ⚙ Settings restarts this tutorial.'},
 ];
 
 export function loadProgress() {

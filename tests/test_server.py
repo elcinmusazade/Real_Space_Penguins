@@ -46,7 +46,7 @@ class ServerTests(unittest.TestCase):
         status, mime, css = self.request("/campaign.css")
         self.assertEqual((status, mime), (200, "text/css"))
         self.assertIn(b".terrain-map", css)
-        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css"),("/tutorial.js", "text/javascript"),("/tutorial.css", "text/css")):
+        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css"),("/tutorial.js", "text/javascript"),("/tutorial.css", "text/css"),("/advisor.js", "text/javascript"),("/advisor.css", "text/css")):
             code, kind, body = self.request(path)
             self.assertEqual((code,kind),(200,expected_type))
             self.assertGreater(len(body),100)
@@ -56,6 +56,15 @@ class ServerTests(unittest.TestCase):
         status, mime, js = self.request("/app.js")
         self.assertEqual((status, mime), (200, "text/javascript"))
         self.assertIn(b"./bridge.js", js)
+
+    def test_advice_endpoint(self):
+        state = json.loads(self.request("/api/campaign/new", {"seed": "AURA"})[2])["state"]
+        status, _, raw = self.request("/api/campaign/advice", {"state": state})
+        self.assertEqual(status, 200)
+        result = json.loads(raw)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["items"])
+        self.assertEqual(self.request("/api/campaign/advice", {"state": {"version": 1}})[0], 400)
 
     def test_surface_inspection_endpoint_reports_costs_without_changing_save(self):
         state = json.loads(self.request("/api/campaign/new", {"seed":"COAST"})[2])["state"]

@@ -177,3 +177,10 @@ Do not expand or relabel the existing four-destination GMAT table. New outer rou
 **Status:** Implemented on `feature/tutorial`. **Date:** 2026-11-15. **Reason:** User asked for a typical game tutorial with mechanics, objectives and hints, closable and restartable from settings.
 
 Use spotlight coach marks over the real interface rather than a separate sandbox, so the player learns the actual controls. Action steps wait for the real action and advance on their own, but SKIP STEP is always offered so no one gets stuck. The tutorial is presentation only: it reads state, never changes it, and stores its progress as a browser preference (not in the Python-validated save). Settings is a new ⚙ dialog for tutorial control plus the existing guide-card and ambient-motion preferences. The overlay sits above the map HUD but below the solar navigator, dialogs and flight animations.
+
+
+## D-022 — AURA advice computed from the rules
+
+**Status:** Implemented on `feature/tutorial`. **Date:** 2026-11-15. **Reason:** The ✺ button only reopened a fixed briefing, while the tutorial promised advice.
+
+Compute advice in Python so it uses the authoritative rules instead of re-implementing them in the browser: project supplies by running one turn on a deep copy, lab-test the saved flight software, read the GMAT window table. Advice is read-only and offline (no LLM). Each item carries a typed action the UI maps onto existing navigation or the existing `prepare` command, so advice never introduces a new state change.

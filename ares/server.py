@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__
-from . import engine, campaign, faults, research
+from . import advice, engine, campaign, faults, research
 from .campaign_data import campaign_catalog
 
 
@@ -40,6 +40,8 @@ STATIC_TYPES = {
     "program.css": "text/css; charset=utf-8",
     "tutorial.js": "text/javascript; charset=utf-8",
     "tutorial.css": "text/css; charset=utf-8",
+    "advisor.js": "text/javascript; charset=utf-8",
+    "advisor.css": "text/css; charset=utf-8",
     "bridge.js": "text/javascript; charset=utf-8",
     "engine-view.js": "text/javascript; charset=utf-8",
     "art.js": "text/javascript; charset=utf-8",
@@ -81,7 +83,7 @@ class GameHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test", "/api/campaign/inspect", "/api/campaign/research"):
+        if path not in ("/api/new", "/api/action", "/api/validate", "/api/campaign/new", "/api/campaign/quote", "/api/campaign/action", "/api/campaign/validate", "/api/campaign/faults/test", "/api/campaign/inspect", "/api/campaign/research", "/api/campaign/advice"):
             self._json({"ok": False, "error": "Unknown endpoint."}, HTTPStatus.NOT_FOUND)
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -122,6 +124,9 @@ class GameHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/campaign/validate":
                 self._json(checked)
+                return
+            if path == "/api/campaign/advice":
+                self._json(advice.advise(checked["state"]))
                 return
             if path == "/api/campaign/research":
                 self._json(research.inspect(checked["state"]))
