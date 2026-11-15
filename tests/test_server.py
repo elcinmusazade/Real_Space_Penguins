@@ -47,7 +47,7 @@ class ServerTests(unittest.TestCase):
         status, mime, css = self.request("/campaign.css")
         self.assertEqual((status, mime), (200, "text/css"))
         self.assertIn(b".terrain-map", css)
-        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-music.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css"),("/tutorial.js", "text/javascript"),("/tutorial.css", "text/css"),("/advisor.js", "text/javascript"),("/advisor.css", "text/css")):
+        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-music.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css"),("/tutorial.js", "text/javascript"),("/credits.js", "text/javascript"),("/tutorial.css", "text/css"),("/advisor.js", "text/javascript"),("/advisor.css", "text/css")):
             code, kind, body = self.request(path)
             self.assertEqual((code,kind),(200,expected_type))
             self.assertGreater(len(body),100)
@@ -63,6 +63,13 @@ class ServerTests(unittest.TestCase):
         status, mime, credits = self.request("/music/credits.txt")
         self.assertEqual((status, mime), (200, "text/plain"))
         self.assertIn(b"https://creativecommons.org/licenses/", credits)
+        status, mime, manifest = self.request("/music/recordings.json")
+        self.assertEqual((status, mime), (200, "application/json"))
+        tracks = json.loads(manifest)
+        self.assertCountEqual((track["world"] for track in tracks), WORLDS)
+        for track in tracks:
+            for field in ("composer", "performer", "source", "license"):
+                self.assertIn(track[field].encode(), credits)
         for world in WORLDS:
             with self.subTest(world=world):
                 self.assertIn(world.title().encode() + " — ".encode(), credits)

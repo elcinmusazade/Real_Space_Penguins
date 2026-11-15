@@ -32,7 +32,7 @@ const player=createPlanetMusic(host,doc);
 const ui=()=>settingsView({tutorial:{status:'offer'},music:player.settings,mapMotion:true,guideHidden:false});
 assert.match(ui(),/data-field="music-enabled" checked/);
 assert.match(ui(),/Peaceful Village · Stefan Grossmann/);
-assert.match(ui(),/href="\.\/music\/credits\.txt"/);
+assert.match(ui(),/data-action="credits-open"/);
 player.select('earth');
 assert.equal(contexts.length,0,'no autoplay or network requests on startup');
 assert.equal(loads.length,0);

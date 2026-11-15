@@ -207,3 +207,7 @@ The player requested music from the internet after hearing the generated themes.
 ## D-027 — Gemini campaign chat
 
 The player requested JARVIS through Gemini’s free tier. The game host calls Gemini 3.1 Flash-Lite when the player asks a question. It keeps the API key on the host, summarizes visible campaign progress, and gives the model a read-only role. A missing key or exhausted quota is reported in the chat. Gameplay is independent of the service.
+
+## D-028 — Colonize all eight planets
+
+The opening sets the campaign objective. Establishing a base or a cloud platform counts once per planet. Mars HQ counts from the start. Europa is optional. An established site remains part of the programme’s colonization history even if it goes dark. Progress is reconstructed from saved hubs, so existing campaigns receive credit. The eighth planet triggers victory once and players can keep playing.

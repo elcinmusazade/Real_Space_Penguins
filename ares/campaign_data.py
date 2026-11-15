@@ -16,6 +16,7 @@ WORLDS = {
     "neptune": {"name": "Neptune", "kind": "Ice giant", "mapLayer": "atmosphere", "role": "Deep-atmosphere science", "color": "#6a98d2", "description": "Explore deep-blue cloud layers, bright plumes and dark vortices using fictional floating platforms. Supplies arrive after a long interplanetary journey.", "hazard": "Violent wind systems", "environment": "Cloud platforms · game setting", "baseRisk": 0.23, "sites": ["Blue Cloud Deck", "Dark Vortex Perimeter", "Southern Plume Belt"]},
 }
 
+COLONY_PLANETS = ("mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune")
 ATMOSPHERIC_WORLDS = frozenset(w for w, spec in WORLDS.items() if spec.get("mapLayer") == "atmosphere")
 
 ROUTES = {
@@ -122,7 +123,7 @@ MAP_SIZE = 96  # Large, independent explorable surface for every planetary hub.
 def catalog() -> dict:
     """Public configuration for browser forms. The UI does not change these rules."""
     return {
-        "worlds": WORLDS, "hulls": HULLS, "engines": ENGINES,
+        "worlds": WORLDS, "colonyPlanets": list(COLONY_PLANETS), "hulls": HULLS, "engines": ENGINES,
         "payloads": PAYLOADS, "trajectories": TRAJECTORIES,
         "buildings": BUILDINGS, "research": RESEARCH,
         "researchBranches": RESEARCH_BRANCHES, "techUnlocks": TECH_UNLOCKS,

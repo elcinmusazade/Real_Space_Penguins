@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {mapScreen} from '../web/map-ui.js';
 import {solarSystemView} from '../web/solar-system.js';
 import {guideSteps} from '../web/program-ui.js';
+import {colonyObjective} from '../web/tutorial.js';
 import {advisorView,badgeCount} from '../web/advisor.js';
 
 const fixture=JSON.parse(readFileSync(0,'utf8'));
@@ -53,6 +54,12 @@ function onMars(s,hubId='H1'){
 const prefs=new Map(), tutorialKey='ares.first-light.tutorial.v1';
 const s=await session(null,prefs);onMars(s);
 assert.match(s.tutorialRoot.innerHTML,/Welcome, Commander/);
+assert.match(s.tutorialRoot.innerHTML,/Win by colonizing all planets/);
+assert.match(s.tutorialRoot.innerHTML,/1 \/ 8 planets colonized/);
+assert.match(s.tutorialRoot.innerHTML,/Mars · colonized/);
+const completedObjective=colonyObjective({catalog:fixture.catalog,state:{colonizedPlanets:fixture.catalog.colonyPlanets}});
+assert.match(completedObjective,/Victory! All planets colonized/);
+assert.match(completedObjective,/8 \/ 8 planets colonized/);
 assert.deepEqual(JSON.parse(prefs.get(tutorialKey)),{status:'active',step:0});
 const reload=await session(s.saves.at(-1),prefs);
 assert.match(reload.tutorialRoot.innerHTML,/Welcome, Commander/);

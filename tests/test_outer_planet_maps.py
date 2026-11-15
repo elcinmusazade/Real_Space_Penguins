@@ -22,6 +22,31 @@ class OuterPlanetMapTests(unittest.TestCase):
         s['tech'] = list(RESEARCH)
         return s
 
+    def test_victory_on_eighth_planet_arrival_and_play_continues(self):
+        state = act(self.ready(), 'launch', design=platform('neptune'))
+        state['turn'] = state['missions'][0]['arrivesAt'] - 1
+        for world in ('mercury', 'venus', 'earth', 'jupiter', 'saturn', 'uranus'):
+            state['hubs'].append(campaign._hub(world, world, 'surface', WORLDS[world]['sites'][0]))
+        self.assertEqual(len(campaign.validate(state)['state']['colonizedPlanets']), 7)
+        state = advance(state, 1)
+        self.assertEqual(len(state['colonizedPlanets']), 8)
+        self.assertIn('Victory!', state['log'][-1]['message'])
+        state = advance(state, 1)
+        self.assertEqual(sum('Victory!' in item['message'] for item in state['log']), 1)
+
+    def test_progress_reconstructed_from_established_planets_in_older_saves(self):
+        state = campaign.create_campaign('OLD-COLONIES')
+        self.assertEqual(state.pop('colonizedPlanets'), ['mars'])
+        for world, kind in [('jupiter', 'orbital'), ('europa', 'surface'), ('mars', 'surface'), ('earth', 'surface')]:
+            state['hubs'].append(campaign._hub(world, world, kind, WORLDS[world]['sites'][0]))
+        state['visitedWorlds'] = list(WORLDS)
+        checked = campaign.validate(state)
+        self.assertTrue(checked['ok'], checked.get('error'))
+        self.assertEqual(checked['state']['colonizedPlanets'], ['earth', 'mars'])
+        self.assertNotIn('colonizedPlanets', state)
+        state['colonizedPlanets'] = list(WORLDS)
+        self.assertEqual(campaign.validate(state)['state']['colonizedPlanets'], ['earth', 'mars'])
+
     def test_all_planets_have_distinct_seeded_maps_and_catalog_coverage(self):
         s = campaign.create_campaign('MAP-CATALOG')
         before = deepcopy(s)

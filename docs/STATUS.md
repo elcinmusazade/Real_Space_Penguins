@@ -4,6 +4,8 @@
 
 ## Built
 
+- **Campaign opening and credits.** The welcome briefing and Programme show progress toward colonizing all eight planets. Settings → Game credits lists the team, soundtrack and licenses, mission data, educational sources and tools. [Change log](changes/2026-11-15-colonization-objective-and-credits.md)
+
 - **JARVIS on the first visit.** New players see a mint “Open chat” button on the map. It returns to its usual appearance after opening JARVIS or revisiting the campaign. [Change log](changes/2026-11-15-jarvis-first-visit.md)
 
 - **JARVIS campaign chat.** The lower-right JARVIS button opens a conversation about the current campaign with Gemini 3.1 Flash-Lite. [Change log](changes/2026-11-15-jarvis-gemini.md)
@@ -49,6 +51,8 @@
 
 ## Observed checks
 
+- Campaign objective and credits, 2026-11-15: 176 tests passed. One optional GMAT recomputation was skipped because the source clone was absent. Browser verification covered the opening, Programme, all nine recordings, source links and returning to Settings.
+
 - **JARVIS with Gemini.** 175 tests ran with one optional skip. Verified the setup prompt and retry control in the game. Two independent players received live replies for their own campaigns through the host’s configured key.
 
 - First-visit tutorial, 2026-11-15. A fresh browser session opened the welcome step, resumed step two after reload and kept the card closed after dismissal. Settings showed Resume. The full suite passed 166 tests, with one optional GMAT check skipped.
@@ -89,7 +93,7 @@
 ## Honest limitations
 
 - Trajectories are Sun-only two-body Lambert solutions on GMAT's ephemeris, not full GMAT runs. Gravity-assist timing, heavy/super-heavy rockets, capture orbits, landing delta-v, boil-off, hazards, wear and yields are **game estimates**, labelled in the UI.
-- **No campaign ending or loss condition** (on hold by user request). Reviews cut budget but never cancel.
+- Play continues after colonization victory. Reviews can reduce the budget and individual bases can be lost.
 - Planet maps are stylized seeded terrain, not real elevation data (needs an approved download).
 - Touch gestures on a real phone were not tested; only the emulated phone viewport was. Long-campaign balance beyond 24 turns is unchecked.
 - AURA is scripted, not a live LLM. Campaign saves are client-owned data in IndexedDB (localStorage fallback when unavailable); Classic keeps localStorage; not secure for public multiplayer.
@@ -98,6 +102,6 @@
 
 Living isometric maps and the connected research tree are implemented. Next check is actual browser/mobile play-testing when preview access is available; tune research choices, terrain economy and survey pacing using player feedback.
 
-1. Decide the campaign ending (length, final debrief, loss conditions).
+1. Play-test the pacing from the first Earth landing through the eighth planetary colony.
 2. Play-test the economy past turn 24 with both teammates; tune hazard chances, upkeep and goal deadlines.
 3. Optional: real landing-site terrain; more launch-vehicle curves; GMAT-backed off-Earth departures.

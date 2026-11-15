@@ -39,8 +39,8 @@ const editingNewRule = ctx => ctx.addedRule >= 0 && ctx.softwareDraft.rules.leng
  */
 export const STEPS = [
   {chapter: 'Welcome', title: 'Welcome, Commander', center: true,
-    body: 'You run a young space programme from <b>Mars HQ</b>. Your goals: explore and build up Mars, fly the first missions to Earth and beyond, keep your crews alive, and satisfy the review board that sets your budget every year.',
-    hint: 'This card is movable: drag it by its top bar (⠿) to anywhere it is not in the way, and it stays exactly where you put it. Close it any time with ✕; resume or restart from ⚙ Settings.'},
+    body: 'Establish a base on each rocky planet and a cloud platform on each giant. Your <b>headquarters</b> counts as a colony. Europa is an optional expedition.',
+    hint: 'Drag the top bar to move this guide. Resume it any time from Settings.'},
   {chapter: 'Welcome', title: 'Time and resources', target: ['.map-resources'],
     body: 'Science pays for research, credits pay for missions, and your budget adds credits every turn. <b>NEXT TURN</b> moves the calendar forward three months: buildings produce, ships travel, hazards strike.',
     hint: 'Watch CR / TURN: it is your yearly budget, and the review board raises or cuts it based on your results.'},
@@ -205,6 +205,22 @@ function persist(progress) {
   try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch { /* storage unavailable */ }
 }
 
+export function colonyObjective({catalog, state}) {
+  const planets = catalog.colonyPlanets;
+  const colonized = new Set(state.colonizedPlanets);
+  const won = colonized.size === planets.length;
+  return `<section class="colony-objective">
+    <h3>${won ? 'Victory! All planets colonized' : 'Win by colonizing all planets'}</h3>
+    <ol class="colony-route">${planets.map(id => {
+      const world = catalog.worlds[id], settled = colonized.has(id);
+      const label = world.name + (settled ? ' · colonized' : ' · awaiting colony');
+      return `<li class="colony-world ${id}${settled ? ' settled' : ''}" style="--world:${esc(world.color)}" aria-label="${esc(label)}" title="${esc(label)}">
+        <i aria-hidden="true"></i><span>${esc(world.name)}</span>${settled ? '<b aria-hidden="true">✓</b>' : ''}</li>`;
+    }).join('')}</ol>
+    <p class="colony-count">${colonized.size} / ${planets.length} planets colonized</p>
+  </section>`;
+}
+
 /** Settings dialog markup (rendered by campaign.js inside its modal system). */
 export function settingsView({tutorial, mapMotion, guideHidden, music}) {
   const status = {offer: 'Not started', active: `In progress · step ${tutorial.step + 1} of ${STEPS.length}`, paused: `Closed at step ${tutorial.step + 1} of ${STEPS.length}`, done: 'Completed'}[tutorial.status];
@@ -217,10 +233,9 @@ export function settingsView({tutorial, mapMotion, guideHidden, music}) {
       <button class="button primary" data-action="tutorial-restart">${tutorial.status === 'offer' ? 'START TUTORIAL' : 'RESTART TUTORIAL'}</button></div></div>
     <label class="settings-row settings-toggle"><div><b>First-mission guide card</b><small>The small next-step card on the map when the tutorial is off.</small></div><input type="checkbox" data-action="settings-guide" ${guideHidden ? '' : 'checked'}></label>
     <label class="settings-row settings-toggle"><div><b>Planet music</b><small>${music.unavailable?'Audio unavailable':esc(music.title)}</small></div><input type="checkbox" data-field="music-enabled" ${music.enabled?'checked':''}></label>
-    <a class="music-credits" href="./music/credits.txt" target="_blank" rel="noopener">Music credits and recordings ↗</a>
     <label class="settings-row"><b>Music volume</b><span class="music-level"><input type="range" min="0" max="100" step="1" value="${music.volume}" data-field="music-volume" aria-label="Music volume"><output id="music-level">${music.volume}%</output></span></label>
     <label class="settings-row settings-toggle"><div><b>Ambient map motion</b><small>Animated water, foliage and haze. Reduced-motion settings are always respected.</small></div><input type="checkbox" data-action="settings-motion" ${mapMotion ? 'checked' : ''}></label></div>
-    <div class="modal-buttons"><button class="button primary" data-action="dismiss-modal">DONE</button></div></section></div>`;
+    <div class="modal-buttons"><button class="button secondary" data-action="credits-open">Game credits</button><button class="button primary" data-action="dismiss-modal">DONE</button></div></section></div>`;
 }
 
 /**
@@ -275,6 +290,7 @@ export function createTutorial(getContext, {suggest, answer, firstVisit = false}
     return `<div class="tut-head" data-drag><span class="tut-grip" aria-hidden="true">⠿</span><span class="tut-chapter">CHAPTER ${chapters.indexOf(current.chapter) + 1} · ${esc(current.chapter.toUpperCase())}</span>
 <button class="tut-close" data-tut="move" aria-label="Move tutorial card with arrow keys" title="Drag the top bar, or focus here and use arrow keys">✥</button><button class="tut-close" data-tut="close" aria-label="Close tutorial">✕</button></div>
       <h2 id="tut-title">${esc(current.title)}</h2>
+      ${n === 0 ? colonyObjective(getContext()) : ''}
       <p class="tut-body">${current.body}</p>
       ${current.science ? `<p class="tut-science"><span>🔭 THE SCIENCE</span>${current.science}</p>` : ''}
       ${current.hint ? `<p class="tut-hint"><span aria-hidden="true">💡</span> ${esc(current.hint)}</p>` : ''}
@@ -356,7 +372,7 @@ export function createTutorial(getContext, {suggest, answer, firstVisit = false}
       scrolledTarget = selector;
       if (!el.closest('.topbar') && !el.matches('#planet-map')) el.scrollIntoView({block: 'center', behavior: typeof current.target === 'function' ? 'instant' : 'smooth'});
     }
-    root.innerHTML = `<div class="tut-spot ${current.action ? 'is-action' : ''}" aria-hidden="true"></div><div class="tut-card" role="dialog" aria-modal="false" aria-live="polite" aria-labelledby="tut-title">${cardMarkup(current, el)}</div>`;
+    root.innerHTML = `<div class="tut-spot ${current.action ? 'is-action' : ''}" aria-hidden="true"></div><div class="tut-card${progress.step === 0 ? ' tut-welcome' : ''}" role="dialog" aria-modal="false" aria-live="polite" aria-labelledby="tut-title">${cardMarkup(current, el)}</div>`;
     place(el);
     if (keyboard) { keyboard = false; root.querySelector('[data-tut="next"],[data-tut="goto"]')?.focus({preventScroll: true}); }
   }

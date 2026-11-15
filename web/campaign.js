@@ -6,6 +6,7 @@ import {solarSystemView,mountSolarSystem} from './solar-system.js';
 import {softwareView, programView, softwareConfig, ordersConfig, guideSteps} from './program-ui.js';
 import {applyRuleAction, applyRuleField} from './rule-editor.js';
 import {playLaunch, playArrival} from './flight-view.js';
+import {creditsView, loadMusicCredits} from './credits.js';
 import {createTutorial, settingsView, STEPS} from './tutorial.js';
 import {advisorView, badgeCount} from './advisor.js';
 import {createPlanetMusic} from './planet-music.js';
@@ -75,7 +76,7 @@ async function initialize() {
     if(!state)state=(await api('/api/campaign/new',{seed:'HORIZON-01'})).state;
     resetDrafts();
     openHome();
-    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection(),draft,softwareTab,softwareDraft,addedRule,
+    tutorial=createTutorial(()=>({state,catalog,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection(),draft,softwareTab,softwareDraft,addedRule,
       softwareSlots:catalog.computers[softwareDraft.computer].slots,earthLabPassed:softwareTab==='earth'&&softwareTest?.results?.length>0&&softwareTest.passed===softwareTest.results.length,dirtySoftware:!same(softwareDraft,savedSoftware())}),{suggest:suggestTile,answer:applyAnswer,firstVisit:!previous});
     await save(); render();
     // The map can still open while a running server is being upgraded.
@@ -373,6 +374,7 @@ function modalMarkup(){
   if(modal==='event'&&state.event)return `<div class="modal-scrim"><section class="aura-modal event-modal" role="dialog" aria-modal="true" aria-labelledby="event-title"><div class="modal-aura danger">!</div><div class="eyebrow">ENVIRONMENTAL EVENT · TURN ${fmtTurn(state.turn)}</div><h2 id="event-title">${esc(state.event.title)}</h2><p>${esc(state.event.description)}</p><div class="event-options">${state.event.choices.map(c=>`<button class="event-option" data-action="event-choice" data-id="${esc(c.id)}"><b>${esc(c.label)} →</b><span>${esc(c.description)}</span></button>`).join('')}</div></section></div>`;
   if(modal==='confirm-launch'&&quote?.ok){const failed=quote.checks.filter(c=>!c.ok);return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><div class="modal-aura danger">!</div><div class="eyebrow">LAUNCH CHECK FAILED</div><h2 id="confirm-title">This mission ${esc((outcomeText[quote.outcome]||'').toLowerCase())}.</h2><ul class="check-list">${failed.map(c=>`<li class="bad"><b>✕ ${esc(c.label)}</b><span>${esc(c.detail)}</span></li>`).join('')}</ul><p>Launching anyway spends the credits${quote.outcome==='scrub'?'; the spacecraft is returned.':quote.outcome==='stranded'?', the spacecraft and its propellant.':' and the spacecraft will not achieve its objective.'}</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">FIX THE PLAN</button><button class="button primary risky" data-action="confirm-launch">LAUNCH ANYWAY</button></div></section></div>`;}
   if(modal==='advisor')return advisorView({advice:adviceState===state?advice:null,topic:adviceTopic});
+  if(modal==='credits')return creditsView();
   if(modal==='settings')return settingsView({tutorial:tutorial.progress(),mapMotion,guideHidden,music:music.settings});
   if(modal==='reset')return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="reset-title"><div class="eyebrow">CAMPAIGN RESET</div><h2 id="reset-title">Start a new space programme?</h2><p>Begin at Mars HQ with no Earth hub. Travel to Earth and land before building there. Your current browser save will be replaced.</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">CANCEL</button><button class="button primary" data-action="confirm-reset">START ON MARS</button></div></section></div>`;
   return '';
@@ -674,6 +676,14 @@ app.addEventListener('click',async event=>{
   if(action==='intro-plan'){modal=state.event?'event':null;tab='planner';render();refreshQuote();return;}
   if(action==='reset'){modal='reset';render();return;}
   if(action==='dismiss-modal'){modal=null;render();return;}
+  if(action==='credits-open'){
+    modal='credits';render();document.querySelector('[data-action="credits-back"]')?.focus();
+    await loadMusicCredits();
+    return;
+  }
+  if(action==='credits-back'){
+    modal='settings';render();document.querySelector('[data-action="credits-open"]')?.focus();return;
+  }
   if(action==='settings-open'){modal='settings';render();document.querySelector('.settings-modal [data-action="dismiss-modal"]')?.focus();return;}
   if(action==='tutorial-restart'){modal=null;openHome();tutorial.restart();render();return;}
   if(action==='tutorial-resume'){modal=null;tutorial.resume();render();return;}

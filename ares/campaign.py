@@ -22,7 +22,7 @@ from . import research as research_rules
 from .campaign_data import (
     ARRIVAL_SCENARIO, LEGACY_ARRIVAL_SCENARIO, PLANET_DANGERS, BUDGET_MAX, BUDGET_MIN, BUDGET_START, BUILDINGS, DARK_TURNS_TO_LOSE,
     ENGINES, EXAMPLE_ORDERS, FORECAST_LEAD, GOALS, HAZARDS, HULLS, LAUNCH_VEHICLES, MAX_RESOURCE,
-    ATMOSPHERIC_WORLDS, PAYLOADS, PREPARE_COST, REPAIR_COST, RESEARCH, RESOURCE_KEYS, REVIEW_EVERY, ROUTES,
+    ATMOSPHERIC_WORLDS, COLONY_PLANETS, PAYLOADS, PREPARE_COST, REPAIR_COST, RESEARCH, RESOURCE_KEYS, REVIEW_EVERY, ROUTES,
     SCENARIO_INTENSITY, TRAJECTORIES, intensity_range, WEAR, WORLDS, MAP_SIZE,
 )
 from .fault_data import FAULT_COMPUTERS, FAULT_EXAMPLE_RULES
@@ -75,6 +75,11 @@ def _has_surface(hub: dict) -> bool:
     return hub.get("kind") in ("surface", "control")
 
 
+def _colonized_planets(hubs: list) -> list:
+    established = {hub["world"] for hub in hubs if _has_surface(hub)}
+    return [world for world in COLONY_PLANETS if world in established]
+
+
 def _hub(identifier: str, world: str, kind: str, site: str, *, payload: list[str] | None = None, starter: bool = False, seed: str = "HORIZON-01") -> dict:
     payload = payload or []
     is_control = kind == "control"
@@ -125,6 +130,7 @@ def create_campaign(seed: str = "HORIZON-01") -> dict:
         "nextId": 2, "log": [],
     }
     _upgrade_v3(state)
+    state["colonizedPlanets"] = _colonized_planets(state["hubs"])
     _log(state, "Mars Mission Control online. Explore your home base. Earth has no hub until your lander arrives.")
     _log(state, "Departures from Mars use game-estimate transfers. Check your flight software and propellant before every launch.")
     return state
@@ -321,6 +327,9 @@ def validate(state: Any) -> dict:
     error = _validate_v3(state, hub_ids)
     if error:
         return {"ok": False, "error": error}
+    established = _colonized_planets(state["hubs"])
+    if state.get("colonizedPlanets") != established:
+        state = {**state, "colonizedPlanets": established}
     return {"ok": True, "state": state}
 
 
@@ -1380,6 +1389,10 @@ def _advance(state: dict) -> dict:
     if (state["turn"] - 1) % REVIEW_EVERY == 0:
         _review(state)
     _issue_forecasts(state)
+    previously_colonized = state["colonizedPlanets"]
+    state["colonizedPlanets"] = _colonized_planets(state["hubs"])
+    if state["colonizedPlanets"] != previously_colonized and len(state["colonizedPlanets"]) == len(COLONY_PLANETS):
+        return _success(state, "Victory! You have colonized all eight planets.")
     return _success(state, f"Turn {state['turn']} ({flight.turn_date(state['turn'])}): production, arrivals, hazards and research resolved.")
 
 

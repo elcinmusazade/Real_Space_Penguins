@@ -10,7 +10,7 @@ import tempfile
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = ROOT / "tools" / "planet_recordings.json"
+SOURCES = ROOT / "web" / "music" / "recordings.json"
 OUTPUT = ROOT / "web" / "music"
 CHANGES = "Full performance, converted to MP3 with playback gain adjusted for the game."
 

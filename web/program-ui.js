@@ -1,5 +1,6 @@
 /** Read-only views for Campaign V3: flight software, standing orders, programme, debriefs. */
 import {ruleEditor} from './rule-editor.js';
+import {colonyObjective} from './tutorial.js';
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pill = (text, tone = '') => `<span class="pill ${tone}">${esc(text)}</span>`;
@@ -108,6 +109,7 @@ export function programView({catalog, state, date}) {
   const reports = state.missions.filter(m => m.report?.length).slice().reverse();
   return `${ribbon('PROGRAMME OFFICE', `${date} / BUDGET ${state.budget} CR PER TURN`)}
   <div class="page-heading"><div><h1>Answer to the review board.</h1><p>Every ${catalog.reviewEvery} turns (one year) a review scores science, mission results, goals and crew safety. Good years raise your budget; bad years cut it.</p></div>${pill(`NEXT REVIEW TURN ${nextReview}`, 'green')}</div>
+  ${colonyObjective({catalog, state})}
   <div class="dual-panels">
     <section class="surface-card"><div class="subheading"><h2>Programme goals</h2><span>${state.goals.filter(g => g.status === 'done').length} / ${catalog.goals.length} COMPLETE</span></div>${goalRows(catalog, state)}</section>
     <section class="surface-card"><div class="subheading"><h2>Reviews</h2><span>BUDGET ${state.budget} CR / TURN</span></div>

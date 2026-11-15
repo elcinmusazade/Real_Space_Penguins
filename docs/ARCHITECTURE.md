@@ -118,7 +118,7 @@ The engine's one resource-allocation plan underlies production, forecasts, and e
 
 The priority is a transparent game rule, not an asserted NASA operating procedure.
 
-The music player follows the world on screen and previews playable bodies in the solar navigator. It loads on demand after a user gesture, loops decoded audio buffers, retains the last two decoded tracks, and suspends playback while muted or hidden. Music preferences are separate from campaign state. The optional authoring script `tools/render_planet_music.py` fetches the nine pinned source recordings listed in `tools/planet_recordings.json`, checks their hashes, then uses FFmpeg to write gain-adjusted MP3s and a plain-text credit list for Settings.
+The music player follows the world on screen and previews playable bodies in the solar navigator. It loads on demand after a user gesture, loops decoded audio buffers, retains the last two decoded tracks, and suspends playback while muted or hidden. Music preferences are separate from campaign state. The optional authoring script `tools/render_planet_music.py` fetches the nine pinned source recordings listed in `web/music/recordings.json` (also read by Game credits in Settings), checks their hashes, then uses FFmpeg to write gain-adjusted MP3s and a plain-text credit list for Settings.
 
 ## Development checks
 

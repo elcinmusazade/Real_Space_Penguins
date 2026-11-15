@@ -31,6 +31,7 @@ Answer only the question asked, in the player's language and in a few short sent
 Choose kind "campaign_readout" for a request for the current turn, date, credits, science or base locations. For that kind, return empty text: the game displays the exact values. Choose kind "answer" and write a helpful reply for all other questions, including how to build, what to do next, supplies and future turns.
 
 Campaign guide:
+- Win by colonizing all eight planets. Establish a surface base on each rocky planet and a cloud platform on each giant. Mars HQ counts, Europa is optional, and Programme shows progress.
 - Start at Mars HQ. Earth has no playable base until a surface lander arrives. Solar System opens the orbiting world navigator. A preview does not establish a hub.
 - Next Turn advances three months. On Planet Map, select an uncharted sector near a facility and press Scan Sector for a free scan. A distant Regional Survey uses energy and takes turns. Select a facility, select an empty connected surveyed tile and press Build Here. Construction and production advance on turns.
 - Each hub has separate supplies. Solar Arrays supply energy, Water Plants extract ice or coastal water, Greenhouses use water to make food, and Materials Drills produce materials. Propellant Plants make fuel; Machine Shops make spare parts. Use Supply Lines to send stock between hubs.
@@ -72,6 +73,7 @@ def briefing(state, view, question):
         "budget_per_turn": state["budget"], "total_hubs": len(hubs), "hubs": bases,
         "unlocked_tech": [RESEARCH[t]["name"] for t in state["tech"] if t in RESEARCH],
         "research_in_progress": state["research"], "visited_worlds": state["visitedWorlds"],
+        "colonized_planets": state["colonizedPlanets"],
         "recent_missions": _recent(state["missions"], ("id", "destination", "status", "arrivesAt", "outcome")),
         "recent_shipments": _recent(state["shipments"], ("id", "source", "target", "resource", "amount", "status", "arrivesAt")),
         "forecasts": _recent([f for f in state["forecasts"] if f["turn"] >= state["turn"]], ("hub", "kind", "turn", "severity", "prepared")),
