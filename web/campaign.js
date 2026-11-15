@@ -80,7 +80,7 @@ async function initialize() {
     await save(); render();
     // The map can still open while a running server is being upgraded.
     import('./jarvis.js').then(({mountJarvis})=>{
-      jarvis=mountJarvis(document.querySelector('#jarvis'), jarvisContext);
+      jarvis=mountJarvis(document.querySelector('#jarvis'), jarvisContext, !previous);
       jarvis.sync(state.turn, Boolean(modal||solarOpen));
     }).catch(error=>console.warn('JARVIS could not open.', error));
   }catch(error){app.innerHTML=`<main class="error-page"><h1>Mission engine unavailable</h1><p>${esc(error.message)}</p><p>Run <code>python3 -m ares.server</code> from the project directory.</p><button onclick="location.reload()">Retry connection</button></main>`;}

@@ -3,6 +3,22 @@
 .jarvis-launch,.jarvis-panel{background:#0c1b28;border:1px solid #476978;box-shadow:0 8px 32px #02081069}
 .jarvis-launch{display:flex;align-items:center;gap:9px;padding:9px 15px 9px 10px;border-radius:26px;font:800 12px ui-monospace,monospace;letter-spacing:1.6px;color:#edf9f6;cursor:pointer}
 .jarvis-launch:hover{background:#153041;border-color:#92d4cd}
+.jarvis-invite{display:none}
+.jarvis-launch.first-visit {
+  background:#a0e4d6;
+  border-color:#c8faf0;
+  color:#102b32;
+  text-align:left;
+}
+.jarvis-launch.first-visit:hover{background:#baf2e6}
+.first-visit .jarvis-invite{display:block;margin-top:2px;font:650 10px/1.1 system-ui,sans-serif;letter-spacing:0}
+@media (prefers-reduced-motion:no-preference) {
+  .jarvis-launch.first-visit{animation:jarvis-invite 1.8s ease-out 2}
+  @keyframes jarvis-invite {
+    from{box-shadow:0 0 0 1px #a0e4d6a6,0 8px 32px #02081069}
+    to{box-shadow:0 0 0 9px #a0e4d600,0 8px 32px #02081069}
+  }
+}
 .jarvis-orb{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;border:1px solid #548d91;background:radial-gradient(circle,#78e4dd32 0%,#142d38 67%);position:relative}
 .jarvis-orb::before{content:'';width:17px;height:17px;border:1px solid #94dcd6;border-left-color:transparent;border-radius:50%;transform:rotate(-35deg)}
 .jarvis-orb::after{content:'';position:absolute;width:6px;height:6px;background:#aff8e5;transform:rotate(45deg);box-shadow:0 0 8px #77d9cc}
@@ -34,5 +50,5 @@
 #jarvis :focus-visible{outline:2px solid #f4c59d;outline-offset:2px}
 @media(min-width:901px){.map-controls{bottom:84px}}
 @media(max-width:900px){#jarvis{right:10px;bottom:132px}.map-controls{right:137px}#jarvis:has(.jarvis-panel:not([hidden])),body:has(.game-screen-panel) #jarvis{bottom:12px}}
-@media(max-width:600px){#jarvis{right:8px;bottom:181px}.jarvis-launch{padding:4px 9px 4px 5px;font-size:10px;gap:6px}.jarvis-launch .jarvis-orb{width:24px;height:24px}.map-controls{right:107px}.jarvis-panel{max-height:calc(100dvh - 24px);width:min(368px,calc(100vw - 16px))}}
+@media(max-width:600px){.first-visit .jarvis-invite{font-size:9px}#jarvis{right:8px;bottom:181px}.jarvis-launch{padding:4px 9px 4px 5px;font-size:10px;gap:6px}.jarvis-launch .jarvis-orb{width:24px;height:24px}.map-controls{right:107px}.jarvis-panel{max-height:calc(100dvh - 24px);width:min(368px,calc(100vw - 16px))}}
 

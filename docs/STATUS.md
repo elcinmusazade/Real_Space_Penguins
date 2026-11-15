@@ -4,6 +4,8 @@
 
 ## Built
 
+- **JARVIS on the first visit.** New players see a mint “Open chat” button on the map. It returns to its usual appearance after opening JARVIS or revisiting the campaign. [Change log](changes/2026-11-15-jarvis-first-visit.md)
+
 - **JARVIS campaign chat.** The lower-right JARVIS button opens a conversation about the current campaign with Gemini 3.1 Flash-Lite. [Change log](changes/2026-11-15-jarvis-gemini.md)
 
 - **Earth tutorial, step 29.** Adding a flight rule moves the spotlight onto its editable block. **Set it up for me** creates or fills the hurricane rule in the Earth draft. The next step guides the player through the lab test and save. [Change log](changes/2026-11-15-earth-tutorial-rule.md)

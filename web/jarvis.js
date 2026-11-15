@@ -1,5 +1,5 @@
 /** The chat lives outside the campaign render tree so turns and navigation preserve the exchange. */
-export function mountJarvis(root, getContext) {
+export function mountJarvis(root, getContext, firstVisit) {
   const launch = root.querySelector('.jarvis-launch');
   const panel = root.querySelector('.jarvis-panel');
   const form = root.querySelector('form');
@@ -11,13 +11,16 @@ export function mountJarvis(root, getContext) {
   const retry = root.querySelector('.jarvis-retry');
   const turnLabel = root.querySelector('.jarvis-turn');
   let history = [], pending = null, failed = null;
+  launch.classList.toggle('first-visit', firstVisit);
 
   function toggle(open) {
     panel.hidden = !open;
     launch.hidden = open;
     launch.setAttribute('aria-expanded', String(open));
-    if (open) input.focus();
-    else if (!root.hidden) launch.focus({preventScroll: true});
+    if (open) {
+      launch.classList.remove('first-visit');
+      input.focus();
+    } else if (!root.hidden) launch.focus({preventScroll: true});
   }
 
   function bubble(role, text, turn) {
@@ -95,6 +98,7 @@ export function mountJarvis(root, getContext) {
       turnLabel.textContent = 'TURN ' + String(turn).padStart(2, '0');
     },
     reset() {
+      launch.classList.remove('first-visit');
       pending?.abort();
       pending = null;
       failed = null;
