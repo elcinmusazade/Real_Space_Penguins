@@ -215,6 +215,13 @@ ARRIVAL_SCENARIO = {"earth": "reentry", "mars": "dust", "venus": "heat", "mercur
 SECOND_DANGER = {"earth": "hurricane", "mars": "flare", "venus": "superrotation", "mercury": "flare_close", "europa": "plumes", "jupiter": "great_storm", "saturn": "hexagon", "uranus": "dark_rings", "neptune": "deep_cold"}
 PLANET_DANGERS = {world: [ARRIVAL_SCENARIO[world], SECOND_DANGER[world]] for world in ARRIVAL_SCENARIO}
 SCENARIO_INTENSITY = (0.85, 1.25)  # actual conditions vary per mission around the lab test
+# Earth is the best-forecast world (NOAA hurricane and space-weather forecasts), so an Earth
+# arrival never meets conditions harsher than the lab test. This keeps the first mission gentle.
+WORLD_INTENSITY = {"earth": (0.8, 1.0)}
+
+
+def intensity_range(world: str) -> tuple[float, float]:
+    return WORLD_INTENSITY.get(world, SCENARIO_INTENSITY)
 
 # Surface hazards (game values). chance = per-turn chance a forecast is issued
 # for a hub on that world; growth = severity added per elapsed turn.

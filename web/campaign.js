@@ -8,7 +8,7 @@ import {applyRuleAction, applyRuleField} from './rule-editor.js';
 import {playLaunch, playArrival} from './flight-view.js';
 import {createTutorial, settingsView} from './tutorial.js';
 import {advisorView, badgeCount} from './advisor.js';
-import {shipSvg} from './ship-view.js';
+import {mountShip3d} from './ship-view.js';
 
 import {loadCampaign,saveCampaign} from './campaign-save.js';
 const app = document.querySelector('#app');
@@ -24,11 +24,11 @@ let tab='system', selectedWorld='mars', selectedHub='H1', selectedBuilding=null,
 let mapController=null, mapMotion=true;
 let inspection=null, inspectionKey=null, inspectionRequest=0;
 let techSelected='surveying',techZoom=.85,researchData=null,researchState=null,researchRequest=0;
-let solarOpen=false,solarSelected='mars',solarRoutes=true,solarController=null;
+let solarOpen=false,solarSelected='mars',solarRoutes=true,solarController=null,shipController=null;
 const solarCamera={x:0,y:0,zoom:1};
 const solarMotion={paused:false,elapsedMs:0};
 let modal=null, assistantTopic='welcome';
-let draft={source:'H1',destination:'earth',site:'Cape Canaveral',objective:'surface',hull:'lander',engine:'chemical',trajectory:'balanced',payload:['survey','lab'],vehicle:'atlas_v_401',propellantKg:600};
+let draft={source:'H1',destination:'earth',site:'Cape Canaveral',objective:'surface',hull:'lander',engine:'chemical',trajectory:'fast',payload:['survey'],vehicle:'atlas_v_401',propellantKg:300};
 let softwareDraft=null, ordersDraft=null, softwareTest=null, guideHidden=false;
 let softwareTab='default'; // Software screen: 'default' or a planet id
 let recentPart=null, recentAt=0, massDelta=null; // Shipyard feedback: which part just changed, and the launch-mass change it caused
@@ -71,7 +71,7 @@ async function initialize() {
     if(!state)state=(await api('/api/campaign/new',{seed:'HORIZON-01'})).state;
     resetDrafts();
     openHome();
-    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection()}),{suggest:suggestTile});
+    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection(),draft,softwareTab,softwareDraft}),{suggest:suggestTile,answer:applyAnswer});
     await save(); render();
   }catch(error){app.innerHTML=`<main class="error-page"><h1>Mission engine unavailable</h1><p>${esc(error.message)}</p><p>Run <code>python3 -m ares.server</code> from the project directory.</p><button onclick="location.reload()">Retry connection</button></main>`;}
 }
@@ -154,44 +154,64 @@ function selectField(name,valueList,current,labels={}) {
   return `<label class="field"><span>${esc(title.toUpperCase())}</span><select data-field="${esc(name)}">${valueList.map(value=>`<option value="${esc(value)}" ${current===value?'selected':''}>${esc(labels[value]||value)}</option>`).join('')}</select></label>`;
 }
 
-function shipBlueprint() {
+const SLOT_ICON={power:'☀',thermal:'♨',shielding:'⬡',entry:'⇣',structure:'▣',comms:'⌁'};
+function shipModel() {
   const sc=catalog.ship,names=Object.fromEntries(sc.slots.map(slot=>[slot,sc.parts[slot][draft.parts[slot]].name]));
-  const elapsed=Date.now()-recentAt,animating=recentPart&&elapsed<900;
-  const svg=shipSvg({parts:draft.parts,previous:animating?{...draft.parts,[recentPart]:'__changed'}:null,hull:draft.hull,engine:draft.engine,payload:draft.payload,propellantKg:draft.propellantKg,names});
-  return `<div class="blueprint ship-blueprint" style="--since:-${animating?elapsed:0}ms"><div class="blueprint-title">YOUR SPACECRAFT <small>${esc(catalog.hulls[draft.hull].name.toUpperCase())} · ${esc(catalog.engines[draft.engine].name.toUpperCase())}</small></div>${svg}
-    <ul class="ship-legend">${sc.slots.map(slot=>`<li class="${animating&&recentPart===slot?'is-new':''}"><small>${esc(sc.slotNames[slot].toUpperCase())}</small><b>${esc(names[slot])}</b></li>`).join('')}</ul>
-    <div class="blueprint-modules">${draft.payload.length?draft.payload.map(p=>`<span>◇ ${esc(catalog.payloads[p].name)}</span>`).join(''):'<span>No payload selected</span>'}</div></div>`;
+  names.engine=catalog.engines[draft.engine].name;names.payload='Payload modules';
+  const age=Date.now()-recentAt;
+  return {parts:draft.parts,hull:draft.hull,engine:draft.engine,payload:draft.payload,propellantKg:draft.propellantKg,names,
+    changed:recentPart&&age<900?recentPart:null,changedAt:performance.now()-age};
+}
+/** Tutorial "SET IT FOR ME": fills Shipyard choices (UI draft only; Python still checks the plan). */
+function applyAnswer(answer){
+  if(!answer)return;
+  const {parts,...rest}=answer;
+  if(rest.destination&&rest.destination!==draft.destination){draft.destination=rest.destination;selectedWorld=rest.destination;}
+  Object.assign(draft,rest);
+  if(parts){draft.parts={...draft.parts,...parts};const slot=Object.keys(parts)[0];recentPart=slot;recentAt=Date.now();}
+  if(tab!=='planner')tab='planner';
+  quote=null;render();refreshQuote();
+}
+function pickPart(slot){
+  const target=slot==='payload'?document.querySelector('.payload-chips'):document.querySelector(`[data-field="${slot==='engine'?'engine':'part_'+slot}"]`);
+  if(!target)return;
+  target.scrollIntoView({block:'nearest',behavior:'smooth'});
+  const box=target.closest('.part-pick,.field,.payload-chips');box?.classList.remove('is-flash');void box?.offsetWidth;box?.classList.add('is-flash');
+  if(target.tagName==='SELECT'){target.focus({preventScroll:true});try{target.showPicker?.();}catch{}}
 }
 
 const FIT_WORD={ok:'OK',warn:'WARNING',fail:'FAIL'},FIT_MARK={ok:'✓',warn:'!',fail:'✕'};
-function fitPanel(){
-  if(!quote?.ok||!quote.fit)return '';
-  const here=quote.fit,name=world(here.world).name;
-  return `<section class="fit-panel" aria-label="Planet fit"><div class="eyebrow">PLANET FIT · ${esc(name.toUpperCase())} · ${FIT_WORD[here.status]}</div>
-    <p class="fit-note">Warnings never stop a launch, but a ship that is not built for ${esc(name)} arrives damaged.</p>
-    <ul class="fit-checks">${here.checks.map(c=>`<li class="fit-${c.status}"><b>${FIT_MARK[c.status]} ${esc(c.label)} · ${FIT_WORD[c.status]}</b><span>${esc(c.detail)}</span></li>`).join('')}</ul>
-    <div class="eyebrow">THIS DESIGN AT EVERY DESTINATION</div>
-    <div class="fit-row">${quote.fitAll.map(r=>`<button class="fit-world ${r.world===here.world?'is-current':''}" data-action="fit-world" data-id="${esc(r.world)}" title="Plan this design for ${esc(world(r.world).name)}"><span>${FIT_MARK[r.status]}</span><b>${esc(world(r.world).name)}</b><small>${FIT_WORD[r.status]}</small></button>`).join('')}</div></section>`;
-}
-
-const outcomeText={go:'ALL CHECKS PASS',scrub:'WILL BE SCRUBBED',stranded:'WILL BE STRANDED',flyby:'WILL FLY PAST',drift:'WILL DRIFT PAST'};
+const outcomeText={go:'READY TO LAUNCH',scrub:'WILL BE SCRUBBED',stranded:'WILL BE STRANDED',flyby:'WILL FLY PAST',drift:'WILL DRIFT PAST'};
 function windowStrip(){
   if(!quote.windows?.length)return '';
   const max=Math.max(...quote.windows.map(w=>Math.min(w.totalDvKms,20)));
-  return `<div class="window-strip" aria-label="Lowest total delta-v for the next 12 turns"><div class="eyebrow">NEXT 12 TURNS · LOWER BAR = CHEAPER TRANSFER</div><div class="window-bars">${quote.windows.map(w=>`<span class="window-bar ${w.turn===state.turn?'now':''} ${w.safeDvKms!==null&&w.safeDvKms<=w.totalDvKms+0.6?'reachable':''}" style="--h:${Math.round(Math.min(w.totalDvKms,20)/max*100)}%" title="Turn ${w.turn} (${w.date}): ${w.totalDvKms} km/s total, C3 ${w.c3}"><i></i><small>${w.turn}</small></span>`).join('')}</div></div>`;
+  return `<div class="window-strip" aria-label="Lowest total delta-v for the next 12 turns"><div class="yard-label">LAUNCH WINDOWS · LOWER IS CHEAPER</div><div class="window-bars">${quote.windows.map(w=>`<span class="window-bar ${w.turn===state.turn?'now':''} ${w.safeDvKms!==null&&w.safeDvKms<=w.totalDvKms+0.6?'reachable':''}" style="--h:${Math.round(Math.min(w.totalDvKms,20)/max*100)}%" title="Turn ${w.turn} (${w.date}): ${w.totalDvKms} km/s total"><i></i><small>${w.turn}</small></span>`).join('')}</div></div>`;
 }
-function quotePanel() {
-  if(!quote)return `<div class="quote-panel"><div class="eyebrow">FLIGHT CALCULATION</div><p>Calculating launch parameters with Python...</p></div>`;
-  if(!quote.ok)return `<div class="quote-panel invalid"><div class="eyebrow">PLAN NEEDS WORK</div><p>${esc(quote.error)}</p>${quote.requiredTech?`<button class="button secondary" data-action="tech-open" data-id="${esc(quote.requiredTech)}">VIEW REQUIRED TECHNOLOGY ↗</button>`:''}</div>`;
-  const t=quote.transfer,n=quote.numbers,sw=quote.software;
-  return `<div class="quote-panel"><div class="eyebrow">LAUNCH CHECKS · ${esc(outcomeText[quote.outcome])}</div>
-    <ul class="check-list">${quote.checks.map(c=>`<li class="${c.ok?'ok':'bad'}"><b>${c.ok?'✓':'✕'} ${esc(c.label)}</b><span>${esc(c.detail)}</span></li>`).join('')}
-    <li class="${sw.passedNominal?(sw.passedHarsh?'ok':'warn'):'bad'}"><b>${sw.passedNominal?(sw.passedHarsh?'✓':'!'):'✕'} ${esc(world(quote.destination).name)} flight rules (${sw.ownRules?'its own':'the default'})</b><span>${(sw.dangers||[]).map(d=>`${esc(d.name)}: ${d.passed?(d.harsh?'pass':'pass, but not if 25% harsher'):d.lost?'ship LOST':`damaged (${d.science}/${d.target} science)`}`).join(' · ')}${sw.passedNominal?'':`. ${esc(sw.hint||'Fix the rules on the Software screen.')}`}</span></li></ul>
-    <div class="quote-grid"><div><small>LAUNCH</small><strong>${esc(t.launch)}</strong></div><div><small>ARRIVAL · TURN ${quote.arrivalTurn}</small><strong>${esc(t.arrival)}</strong></div><div><small>LAUNCH ENERGY C3</small><strong>${t.c3??'—'}<em> km²/s²</em></strong></div><div><small>ARRIVAL SPEED</small><strong>${t.arrivalVinf}<em> km/s</em></strong></div><div><small>DELTA-V NEED / HAVE</small><strong>${n.dvNeedKms} / ${n.dvHaveKms}<em> km/s</em></strong></div><div><small>LAUNCH MASS${massDelta&&Date.now()-massDelta.at<4000?` · <span class="delta">${massDelta.kg>0?'+':''}${num(massDelta.kg)} kg</span>`:''}</small><strong>${num(n.launchKg)}<em> kg${n.vehicleCapacityKg!==null?' / '+num(n.vehicleCapacityKg):''}</em></strong></div><div><small>FUEL · CREDITS</small><strong>${quote.fuel}<em> U</em> · ${quote.credits}<em> CR</em></strong></div><div><small>SHIP MATERIALS</small><strong>${quote.materials}<em> MAT</em></strong></div></div>
-    ${t.label?`<p class="field-description">${esc(t.label)}.</p>`:''}
+function meter(label,value,limit,unit,good){
+  const pct=limit?Math.min(100,Math.round(value/limit*100)):0;
+  return `<div class="yard-meter ${good?'ok':'bad'}"><div><small>${label}</small><b>${value}<em> / ${limit} ${unit}</em></b></div><span><i style="width:${pct}%"></i></span></div>`;
+}
+function statusPanel() {
+  const launch=`<button class="button primary yard-launch ${quote?.ok&&quote.outcome!=='go'?'risky':''}" data-action="launch" ${!quote?.ok||!quote?.affordable||pending?'disabled':''}>${quote?.ok&&quote.outcome!=='go'?'LAUNCH ANYWAY…':'LAUNCH ↗'}</button>`;
+  if(!quote)return `<div class="quote-panel yard-verdict wait"><span>◌</span><b>Calculating…</b></div>${launch}`;
+  if(!quote.ok)return `<div class="quote-panel yard-verdict invalid"><span>✕</span><b>Plan needs work</b><p>${esc(quote.error)}</p>${quote.requiredTech?`<button class="button secondary" data-action="tech-open" data-id="${esc(quote.requiredTech)}">VIEW REQUIRED TECHNOLOGY ↗</button>`:''}</div>${launch}`;
+  const t=quote.transfer,n=quote.numbers,sw=quote.software,go=quote.outcome==='go';
+  const swOk=sw.passedNominal,swText=swOk?'':(sw.hint||'Fix the rules on the Software screen.');
+  const fit=quote.fit,place=world(fit.world).name,issues=fit.checks.filter(c=>c.status!=='ok');
+  const massDeltaTag=massDelta&&Date.now()-massDelta.at<4000?` <span class="delta">${massDelta.kg>0?'+':''}${num(massDelta.kg)}</span>`:'';
+  return `<div class="quote-panel yard-verdict ${go?'go':'nogo'}"><span>${go?'✓':'✕'}</span><b>${outcomeText[quote.outcome]}</b><p>Arrives turn ${quote.arrivalTurn} · ${esc(t.arrival)}</p></div>
+    <ul class="check-list yard-checks">${quote.checks.map(c=>`<li class="${c.ok?'ok':'bad'}"><b>${c.ok?'✓':'✕'} ${esc(c.label)}</b>${c.ok?'':`<span>${esc(c.detail)}</span>`}</li>`).join('')}
+      <li class="${swOk?(sw.passedHarsh?'ok':'warn'):'bad'}"><b>${swOk?(sw.passedHarsh?'✓':'!'):'✕'} ${esc(world(quote.destination).name)} flight rules</b>${swOk?'':`<span>${esc(swText)}</span>`}</li>
+      <li class="${fit.status==='ok'?'ok':fit.status==='warn'?'warn':'bad'}"><b>${FIT_MARK[fit.status]} Built for ${esc(place)}</b>${issues.map(c=>`<span>${esc(c.label)}: ${esc(c.detail)}</span>`).join('')}</li></ul>
+    ${n.vehicleCapacityKg!==null?meter(`LAUNCH MASS${massDeltaTag}`,num(n.launchKg),num(n.vehicleCapacityKg),'kg',n.launchKg<=n.vehicleCapacityKg):`<div class="yard-meter"><div><small>LAUNCH MASS${massDeltaTag}</small><b>${num(n.launchKg)}<em> kg</em></b></div></div>`}
+    <div class="yard-meter ${n.dvHaveKms>=n.dvNeedKms?'ok':'bad'}"><div><small>DELTA-V HAVE / NEED</small><b>${n.dvHaveKms}<em> / ${n.dvNeedKms} km/s</em></b></div><span><i style="width:${Math.min(100,Math.round(n.dvHaveKms/Math.max(n.dvNeedKms,0.01)*100))}%"></i></span></div>
+    <div class="yard-cost"><span><b>${quote.credits}</b> CR</span><span><b>${quote.fuel}</b> FUEL</span><span><b>${quote.materials}</b> MAT</span></div>
     ${windowStrip()}
-    ${quote.rescue?`<div class="callout">This landing will reopen the lost base at ${esc(quote.site)}.</div>`:''}
-    ${!quote.affordable?'<div class="quote-warning">Insufficient resources at the departure hub. Refill or ship resources before launching.</div>':''}<p class="simulation-note">${esc(quote.notice)}</p></div>`;
+    ${quote.rescue?`<div class="callout">Reopens the lost base at ${esc(quote.site)}.</div>`:''}
+    ${!quote.affordable?'<div class="quote-warning">Not enough resources at the departure hub.</div>':''}
+    ${launch}
+    <div class="yard-label">THIS SHIP ELSEWHERE</div>
+    <div class="fit-row">${quote.fitAll.map(r=>`<button class="fit-world fit-${r.status} ${r.world===fit.world?'is-current':''}" data-action="fit-world" data-id="${esc(r.world)}" title="${esc(world(r.world).name)}: ${FIT_WORD[r.status]} — click to plan for it"><span>${FIT_MARK[r.status]}</span>${esc(world(r.world).name)}</button>`).join('')}</div>`;
 }
 
 function plannerView() {
@@ -201,19 +221,27 @@ function plannerView() {
   const w=world(draft.destination),atmosphere=w.mapLayer==='atmosphere';
   const gmat=fromEarth&&catalog.gmatDestinations.includes(draft.destination);
   const sites=draft.objective==='surface'?w.sites:[draft.objective==='orbital'?'Orbital Station':'Remote Survey'];
-  return `${ribbon('MISSION PLANNING','SHIPYARD / TRAJECTORY DESIGN')}<div class="page-heading"><div><h1>Design the impossible.</h1><p>Turn ${state.turn} · ${turnDate(state.turn)}. ${gmat?'Earth departures use GMAT-derived launch windows and Atlas V 401 performance data.':'Departures from '+esc(world(hub(draft.source).world).name)+' use game-estimate transfers. Review propellant, travel time and arrival checks.'}</p></div>${pill(gmat?'GMAT LAUNCH WINDOWS':'GAME-ESTIMATE TRANSFER')}</div>
-  <div class="planner-layout"><section class="surface-card planner-form"><div class="subheading"><h2>01 · Mission brief</h2><span>ROUTE</span></div>
-  <div class="form-grid">${selectField('source',Object.keys(sourceNames),draft.source,sourceNames)}${selectField('destination',destinations,draft.destination,Object.fromEntries(destinations.map(id=>[id,world(id).name])))}${selectField('objective',['surface','orbital','survey'],draft.objective,{surface:atmosphere?'Deploy atmospheric platform':'Establish surface hub',orbital:'Deploy orbital hub',survey:'Robotic science survey'})}${selectField('site',sites,draft.site)}</div>
-  <div class="subheading"><h2>02 · Configure spacecraft</h2><span>ENGINEERING</span></div><div class="form-grid">${selectField('hull',Object.keys(catalog.hulls),draft.hull,Object.fromEntries(Object.entries(catalog.hulls).map(([id,v])=>[id,unlockLabel('hull',id,`${v.name} · ${num(v.dryKg)} kg dry`)])))}${selectField('engine',Object.keys(catalog.engines),draft.engine,Object.fromEntries(Object.entries(catalog.engines).map(([id,v])=>[id,unlockLabel('engine',id,`${v.name} · Isp ${v.isp} s`)])))}${selectField('trajectory',Object.keys(catalog.trajectories),draft.trajectory,Object.fromEntries(Object.entries(catalog.trajectories).map(([id,v])=>[id,v.name])))}${hub(draft.source)?.world==='earth'?selectField('vehicle',Object.keys(catalog.vehicles),draft.vehicle,Object.fromEntries(Object.entries(catalog.vehicles).map(([id,v])=>[id,unlockLabel('vehicle',id,`${v.name}${v.source==='estimate'?' (estimate)':''} · ${v.credits} CR`)]))):''}</div>
-  <p class="field-description">${esc(gmat?catalog.trajectories[draft.trajectory].description:draft.trajectory==='assist'?'Gravity assists require an Earth departure to Mercury or Europa.':'Transfer timing, arrival speed and Earth launch direction/energy are game estimates for this route; no GMAT launch window is available.')} ${esc(catalog.engines[draft.engine].description)}${hub(draft.source)?.world==='earth'?' '+esc(catalog.vehicles[draft.vehicle].note):''}</p>
-  ${atmosphere?'<p class="callout">Cloud platforms are fictional robotic bases: no solid landing surface. Deployment requires Deep-Space Engineering, a lander/freighter with a Survey Station and Environmental Shield. The platform core supplies 6 energy per turn; weak sunlight makes additional power and supplies important.</p>':''}
-  <div class="subheading"><h2>Ship systems</h2><span>SIX PART SLOTS</span></div>
-  <div class="form-grid parts-grid">${catalog.ship.slots.map(slot=>selectField(`part_${slot}`,Object.keys(catalog.ship.parts[slot]),draft.parts[slot],Object.fromEntries(Object.entries(catalog.ship.parts[slot]).map(([id,p])=>[id,`${p.name}${p.mass?` · ${p.mass} kg`:''}`])))).join('')}</div>
-  <p class="field-description">Each part helps on some worlds and is dead weight on others. The Planet fit panel shows how this design suits every destination.</p>
-  <label class="field propellant-field"><span>PROPELLANT LOAD · ${num(draft.propellantKg)} KG · ${Math.ceil(draft.propellantKg/catalog.fuelUnitKg)} FUEL UNITS</span><div class="propellant-row"><input type="range" data-field="propellantKg" min="0" max="${catalog.propellantMaxKg}" step="50" value="${draft.propellantKg}" aria-label="Propellant load in kilograms"><input type="number" data-field="propellantKg" min="0" max="${catalog.propellantMaxKg}" step="10" value="${draft.propellantKg}" aria-label="Propellant kilograms"></div></label>
-  <div class="subheading"><h2>03 · Select payload</h2><span>MULTIPLE MODULES</span></div><div class="payload-grid">${Object.entries(catalog.payloads).map(([id,p])=>`<button class="payload-card ${draft.payload.includes(id)?'selected':''}" aria-pressed="${draft.payload.includes(id)}" data-action="payload" data-id="${id}"><span class="payload-check">${draft.payload.includes(id)?'✓':'+'}</span><strong>${esc(p.name)}</strong><small>${num(p.mass)} kg · ${p.materials} MAT</small><span>${esc(p.description)}</span></button>`).join('')}</div>
-  <div class="planner-actions"><button class="button secondary" data-action="quote">RECALCULATE</button><button class="button primary ${quote?.ok&&quote.outcome!=='go'?'risky':''}" data-action="launch" ${!quote?.ok||!quote?.affordable||pending?'disabled':''}>${quote?.ok&&quote.outcome!=='go'?'LAUNCH ANYWAY…':'AUTHORIZE LAUNCH ↗'}</button></div></section>
-  <aside class="planner-preview">${shipBlueprint()}${quotePanel()}${fitPanel()}<div class="mission-advice"><span>✺ AURA'S NOTE</span><p>${gmat?'Watch the 12-turn strip for lower-energy Earth departures.':'This route uses fixed game travel estimates; there is no launch-window strip.'} More propellant means a bigger braking burn but a heavier rocket load. Every check must be green, and your flight software must survive the approach.</p></div></aside></div>`;
+  const sc=catalog.ship,issues=new Set((quote?.ok&&quote.fit?quote.fit.checks:[]).filter(c=>c.status!=='ok').map(c=>c.id));
+  const fresh=recentPart&&Date.now()-recentAt<900?recentPart:null;
+  return `${ribbon('SHIPYARD',gmat?'NASA GMAT LAUNCH WINDOWS':'GAME-ESTIMATE TRANSFER')}
+  <div class="yard">
+  <section class="yard-col planner-form">
+    <div class="yard-label">MISSION</div>
+    ${selectField('source',Object.keys(sourceNames),draft.source,sourceNames)}${selectField('destination',destinations,draft.destination,Object.fromEntries(destinations.map(id=>[id,world(id).name])))}${selectField('objective',['surface','orbital','survey'],draft.objective,{surface:atmosphere?'Atmospheric platform':'Land a base',orbital:'Orbital station',survey:'Science survey'})}${draft.objective==='surface'?selectField('site',sites,draft.site):''}
+    <div class="yard-label">ROCKET</div>
+    ${fromEarth?selectField('vehicle',Object.keys(catalog.vehicles),draft.vehicle,Object.fromEntries(Object.entries(catalog.vehicles).map(([id,v])=>[id,unlockLabel('vehicle',id,`${v.name} · ${v.credits} CR`)]))):''}${selectField('hull',Object.keys(catalog.hulls),draft.hull,Object.fromEntries(Object.entries(catalog.hulls).map(([id,v])=>[id,unlockLabel('hull',id,v.name)])))}${selectField('engine',Object.keys(catalog.engines),draft.engine,Object.fromEntries(Object.entries(catalog.engines).map(([id,v])=>[id,unlockLabel('engine',id,v.name)])))}${selectField('trajectory',Object.keys(catalog.trajectories),draft.trajectory,Object.fromEntries(Object.entries(catalog.trajectories).map(([id,v])=>[id,v.name])))}
+    <label class="field propellant-field"><span>PROPELLANT · ${num(draft.propellantKg)} KG</span><input type="range" data-field="propellantKg" min="0" max="${catalog.propellantMaxKg}" step="50" value="${draft.propellantKg}" aria-label="Propellant load in kilograms"></label>
+    ${atmosphere?'<p class="yard-note">Cloud platform: needs Deep-Space Engineering, a Survey Station and an Environmental Shield.</p>':''}
+  </section>
+  <section class="yard-stage">
+    <div class="stage-head">${planetOrb(draft.destination,'small')}<div><b>${esc(w.name)}</b><small>${esc(catalog.hulls[draft.hull].name)} · ${esc(catalog.engines[draft.engine].name)}</small></div></div>
+    <canvas class="ship-canvas" tabindex="0" aria-label="3D spacecraft. Drag or use arrow keys to rotate; click a part to change it."></canvas>
+    <div class="stage-hint">⟲ Drag to rotate · click a part to change it</div>
+    <div class="part-pickers">${sc.slots.map(slot=>`<label class="part-pick ${fresh===slot?'is-new':''}"><span class="part-icon" aria-hidden="true">${SLOT_ICON[slot]}</span><small>${esc(sc.slotNames[slot].toUpperCase())}${issues.has(slot)?' <i class="part-issue" title="Not a good fit for '+esc(w.name)+'">!</i>':''}</small><select data-field="part_${slot}">${Object.entries(sc.parts[slot]).map(([id,p])=>`<option value="${esc(id)}" ${draft.parts[slot]===id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label>`).join('')}</div>
+    <div class="payload-chips" aria-label="Payload modules">${Object.entries(catalog.payloads).map(([id,p])=>`<button class="payload-chip ${draft.payload.includes(id)?'selected':''}" aria-pressed="${draft.payload.includes(id)}" data-action="payload" data-id="${id}" title="${esc(p.description)} · ${num(p.mass)} kg">${draft.payload.includes(id)?'✓':'+'} ${esc(p.name)}</button>`).join('')}</div>
+  </section>
+  <aside class="yard-col yard-status">${statusPanel()}</aside>
+  </div>`;
 }
 
 function stockCards(h) {return `<div class="stock-grid">${Object.entries(h.stocks).map(([key,value])=>`<div class="stock-item"><small>${esc(resourceName[key]||key)}</small><strong>${num(value)}</strong></div>`).join('')}</div>`;}
@@ -384,7 +412,7 @@ function render(){
   const techFocus=focused?.closest('.rd-screen')?{action:focused.dataset.action,id:focused.dataset.id}:null;
   const mapFocus=focused?.id==='planet-map';
   const solarFocus=focused?.closest('.solar-dialog')?{tag:focused.tagName,action:focused.dataset.action,id:focused.dataset.id}:null;
-  solarController?.destroy();solarController=null;
+  solarController?.destroy();solarController=null;shipController?.destroy();shipController=null;
   const secondary=tab==='hubs'&&hub(selectedHub)?.kind==='control'?controlView():tab==='planner'?plannerView():tab==='logistics'?logisticsView():tab==='research'?researchView():tab==='software'?softwareView({catalog,state,softwareTab,softwareDraft,ordersDraft,softwareTest,dirtySoftware:!same(softwareDraft,savedSoftware()),dirtyOrders:!same(ordersDraft,state.orders),shipLabel:shipLabel()}):tab==='program'?programView({catalog,state,date:turnDate(state.turn)}):'';
   const lightWorld=selectedWorld==='earth'?null:selectedWorld;
   app.innerHTML=`<div class="campaign-app map-mode">${topbar()}<main class="map-main">${mapScreen({catalog,state,selectedWorld,selectedHub,selectedBuilding,selectedTile,pending,inspection:inspectionMatches()?inspection:null,mapMotion,date:turnDate(state.turn),lightMinutes:lightWorld?(catalog.lightMinutes?.[lightWorld]?.[(state.turn-1)%catalog.lightMinutes[lightWorld].length]??'—'):0,guide:guideCard()})}${secondary?`<div class="game-screen-dimmer"></div><section class="game-screen-panel"><button class="map-back" data-action="nav" data-id="system">← BACK TO MAP</button>${secondary}</section>`:''}</main></div>${solarOpen?solarSystemView({catalog,state,selected:solarSelected,showRoutes:solarRoutes,date:turnDate(state.turn)}):''}${modalMarkup()}`;
@@ -393,6 +421,8 @@ function render(){
   document.querySelector('.campaign-app').inert=Boolean(modal||solarOpen);
   document.querySelector('[data-action="solar-open"]').setAttribute('aria-expanded',String(solarOpen));
   mountGameMap();
+  const shipCanvas=tab==='planner'&&document.querySelector('.ship-canvas');
+  if(shipCanvas)shipController=mountShip3d(shipCanvas,shipModel(),pickPart);
   if(mapFocus)document.querySelector('#planet-map')?.focus({preventScroll:true});
   refreshInspection();
   if(tab==='research'){
@@ -610,7 +640,9 @@ app.addEventListener('input',event=>{
   if(control.dataset.field!=='propellantKg'||control.type!=='range')return;
   draft.propellantKg=Number(control.value);
   const label=control.closest('.propellant-field')?.querySelector('span');
-  if(label)label.textContent=`PROPELLANT LOAD · ${num(draft.propellantKg)} KG · ${Math.ceil(draft.propellantKg/catalog.fuelUnitKg)} FUEL UNITS`;
+  if(label)label.textContent=`PROPELLANT · ${num(draft.propellantKg)} KG`;
+  const shipCanvas=document.querySelector('.ship-canvas');
+  if(shipCanvas){shipController?.destroy();shipController=mountShip3d(shipCanvas,shipModel(),pickPart);}
   clearTimeout(propTimer);propTimer=setTimeout(()=>{quote=null;refreshQuote();},180);
 });
 

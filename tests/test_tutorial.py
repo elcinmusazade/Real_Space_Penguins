@@ -21,9 +21,17 @@ class TutorialTests(unittest.TestCase):
         self.assertGreaterEqual(len(titles), 20)
         self.assertEqual(len(titles), len(set(titles)))
         self.assertEqual(steps.count("body:"), len(titles))
-        self.assertEqual(steps.count("hint:"), len(titles))
+        # Every step teaches something: a hint, or (Shipyard steps) the real science behind the answer.
+        for block in steps.split("{chapter:")[1:]:
+            self.assertTrue("hint:" in block or "science:" in block, block[:80])
         # Action steps must say how they complete.
         self.assertEqual(steps.count("action: true"), steps.count("done:"))
+
+    def test_shipyard_steps_give_the_exact_answer(self):
+        steps = TUTORIAL[TUTORIAL.index("export const STEPS"):TUTORIAL.index("export function loadProgress")]
+        self.assertGreaterEqual(steps.count("answer:"), 9)
+        self.assertGreaterEqual(steps.count("science:"), 10)
+        self.assertIn("data-tut=\"answer\"", TUTORIAL)
 
     def test_anchors_exist_in_the_interface(self):
         steps = TUTORIAL[TUTORIAL.index("export const STEPS"):TUTORIAL.index("export function loadProgress")]
