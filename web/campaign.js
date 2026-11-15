@@ -17,11 +17,11 @@ const num = value => Math.round(Number(value) || 0).toLocaleString('en-US');
 const fmtTurn = value => String(value).padStart(2, '0');
 const glyph = {earth:'◎',mars:'●',venus:'◉',mercury:'◌',europa:'◍',jupiter:'◉',saturn:'◎',uranus:'◌',neptune:'●'};
 const terrainLabel = {plain:'PLAIN',ice:'ICE',ridge:'RIDGE',science:'SCIENCE',salvage:'CACHE',hazard:'HAZARD'};
-const resourceName = {energy:'Energy',materials:'Materials',fuel:'Fuel',water:'Water',food:'Food',oxygen:'Oxygen',heat:'Heat'};
+const resourceName = {energy:'Energy',materials:'Materials',fuel:'Fuel',water:'Water',food:'Food',oxygen:'Oxygen',heat:'Heat',spares:'Spare parts'};
 let catalog=null, state=null, quote=null, pending=false, quoteId=0;
 function mapCore(){const size=catalog?.mapSize||96;return Math.floor(size/2)*(size+1);}
 let tab='system', selectedWorld='mars', selectedHub='H1', selectedBuilding=null, selectedTile=mapCore();
-let mapController=null, mapMotion=true;
+let mapController=null, mapMotion=true, groundViewPinned=false;
 let inspection=null, inspectionKey=null, inspectionRequest=0;
 let techSelected='surveying',techZoom=.85,researchData=null,researchState=null,researchRequest=0;
 let solarOpen=false,solarSelected='mars',solarRoutes=true,solarController=null;
@@ -189,6 +189,7 @@ function quotePanel() {
     <li class="${sw.passedNominal?(sw.passedHarsh?'ok':'warn'):'bad'}"><b>${sw.passedNominal?(sw.passedHarsh?'✓':'!'):'✕'} ${esc(world(quote.destination).name)} flight rules (${sw.ownRules?'its own':'the default'})</b><span>${(sw.dangers||[]).map(d=>`${esc(d.name)}: ${d.passed?(d.harsh?'pass':'pass, but not if 25% harsher'):d.lost?'ship LOST':`damaged (${d.science}/${d.target} science)`}`).join(' · ')}${sw.passedNominal?'':`. ${esc(sw.hint||'Fix the rules on the Software screen.')}`}</span></li></ul>
     <div class="quote-grid"><div><small>LAUNCH</small><strong>${esc(t.launch)}</strong></div><div><small>ARRIVAL · TURN ${quote.arrivalTurn}</small><strong>${esc(t.arrival)}</strong></div><div><small>LAUNCH ENERGY C3</small><strong>${t.c3??'—'}<em> km²/s²</em></strong></div><div><small>ARRIVAL SPEED</small><strong>${t.arrivalVinf}<em> km/s</em></strong></div><div><small>DELTA-V NEED / HAVE</small><strong>${n.dvNeedKms} / ${n.dvHaveKms}<em> km/s</em></strong></div><div><small>LAUNCH MASS${massDelta&&Date.now()-massDelta.at<4000?` · <span class="delta">${massDelta.kg>0?'+':''}${num(massDelta.kg)} kg</span>`:''}</small><strong>${num(n.launchKg)}<em> kg${n.vehicleCapacityKg!==null?' / '+num(n.vehicleCapacityKg):''}</em></strong></div><div><small>FUEL · CREDITS</small><strong>${quote.fuel}<em> U</em> · ${quote.credits}<em> CR</em></strong></div><div><small>SHIP MATERIALS</small><strong>${quote.materials}<em> MAT</em></strong></div></div>
     ${t.label?`<p class="field-description">${esc(t.label)}.</p>`:''}
+    ${draft.useLocalSpares?`<p class="field-description">Workshop stock: ${quote.spares} spare parts from the departure hub save ${quote.creditSavings} credits on fitted subsystems.</p>`:''}
     ${windowStrip()}
     ${quote.rescue?`<div class="callout">This landing will reopen the lost base at ${esc(quote.site)}.</div>`:''}
     ${!quote.affordable?'<div class="quote-warning">Insufficient resources at the departure hub. Refill or ship resources before launching.</div>':''}<p class="simulation-note">${esc(quote.notice)}</p></div>`;
@@ -210,13 +211,21 @@ function plannerView() {
   <div class="subheading"><h2>Ship systems</h2><span>SIX PART SLOTS</span></div>
   <div class="form-grid parts-grid">${catalog.ship.slots.map(slot=>selectField(`part_${slot}`,Object.keys(catalog.ship.parts[slot]),draft.parts[slot],Object.fromEntries(Object.entries(catalog.ship.parts[slot]).map(([id,p])=>[id,`${p.name}${p.mass?` · ${p.mass} kg`:''}`])))).join('')}</div>
   <p class="field-description">Each part helps on some worlds and is dead weight on others. The Planet fit panel shows how this design suits every destination.</p>
+  <label class="workshop-order"><input type="checkbox" data-field="useLocalSpares" ${draft.useLocalSpares?'checked':''}><span><b>Use local spare parts</b><small>${hub(draft.source)?.stocks.spares||0} at departure · each substitutes for ${catalog.industry.creditsPerSpare} credits of subsystem cost. Unused parts stay at this hub.</small></span></label>
   <label class="field propellant-field"><span>PROPELLANT LOAD · ${num(draft.propellantKg)} KG · ${Math.ceil(draft.propellantKg/catalog.fuelUnitKg)} FUEL UNITS</span><div class="propellant-row"><input type="range" data-field="propellantKg" min="0" max="${catalog.propellantMaxKg}" step="50" value="${draft.propellantKg}" aria-label="Propellant load in kilograms"><input type="number" data-field="propellantKg" min="0" max="${catalog.propellantMaxKg}" step="10" value="${draft.propellantKg}" aria-label="Propellant kilograms"></div></label>
   <div class="subheading"><h2>03 · Select payload</h2><span>MULTIPLE MODULES</span></div><div class="payload-grid">${Object.entries(catalog.payloads).map(([id,p])=>`<button class="payload-card ${draft.payload.includes(id)?'selected':''}" aria-pressed="${draft.payload.includes(id)}" data-action="payload" data-id="${id}"><span class="payload-check">${draft.payload.includes(id)?'✓':'+'}</span><strong>${esc(p.name)}</strong><small>${num(p.mass)} kg · ${p.materials} MAT</small><span>${esc(p.description)}</span></button>`).join('')}</div>
   <div class="planner-actions"><button class="button secondary" data-action="quote">RECALCULATE</button><button class="button primary ${quote?.ok&&quote.outcome!=='go'?'risky':''}" data-action="launch" ${!quote?.ok||!quote?.affordable||pending?'disabled':''}>${quote?.ok&&quote.outcome!=='go'?'LAUNCH ANYWAY…':'AUTHORIZE LAUNCH ↗'}</button></div></section>
   <aside class="planner-preview">${shipBlueprint()}${quotePanel()}${fitPanel()}<div class="mission-advice"><span>✺ AURA'S NOTE</span><p>${gmat?'Watch the 12-turn strip for lower-energy Earth departures.':'This route uses fixed game travel estimates; there is no launch-window strip.'} More propellant means a bigger braking burn but a heavier rocket load. Every check must be green, and your flight software must survive the approach.</p></div></aside></div>`;
 }
 
-function stockCards(h) {return `<div class="stock-grid">${Object.entries(h.stocks).map(([key,value])=>`<div class="stock-item"><small>${esc(resourceName[key]||key)}</small><strong>${num(value)}</strong></div>`).join('')}</div>`;}
+function stockCards(h) {
+  const cards = catalog.resources.map(key => {
+    const delta = h.lastBalance?.[key];
+    const change = delta == null ? '' : `<small class="stock-delta ${delta<0?'out':'in'}">${delta>0?'+':''}${delta} last turn</small>`;
+    return `<div class="stock-item"><small>${esc(resourceName[key]||key)}</small><strong>${num(h.stocks[key])}</strong>${change}</div>`;
+  });
+  return `<div class="stock-grid">${cards.join('')}</div>${h.lastBalance?'<small class="balance-key">Local operations only · excludes shipments and player spending.</small>':''}`;
+}
 
 function tileLabel(tile,h) {
   const task=state.surveys.find(e=>e.hub===h.id&&e.tile===tile.id&&e.status==='en_route');
@@ -363,13 +372,13 @@ async function refreshInspection(){
   catch(error){if(request===inspectionRequest&&inspectionMatches()){inspection={ok:false,error:error.message};render();}}
 }
 
-function mountGameMap(){
+function mountGameMap(groundView){
   const canvas=document.querySelector('#planet-map');
   if(!canvas)return;
   const surface=activeSurface();
   const control=state.hubs.find(h=>h.world===selectedWorld&&h.kind==='control');
   mapController=mountPlanetMap(canvas,document.querySelector('#mini-map'),{
-    world:selectedWorld,hubId:surface?.id||control?.id,size:catalog.mapSize||96,tiles:surface?.tiles||catalog.surfacePreviews[selectedWorld]||[],biomes:catalog.biomes,buildingMode:Boolean(selectedBuilding),motion:mapMotion,controlHub:Boolean(control&&!surface),
+    world:selectedWorld,hubId:surface?.id||control?.id,size:catalog.mapSize||96,tiles:surface?.tiles||catalog.surfacePreviews[selectedWorld]||[],biomes:catalog.biomes,buildingMode:Boolean(selectedBuilding),groundView,motion:mapMotion,controlHub:Boolean(control&&!surface),
     selection:surface?selectedTile:null,turn:state.turn,
     surveys:state.surveys.filter(e=>surface&&e.hub===surface.id&&e.status==='en_route').map(e=>e.tile),
     onSelect:selectMapTile,
@@ -386,13 +395,14 @@ function render(){
   const solarFocus=focused?.closest('.solar-dialog')?{tag:focused.tagName,action:focused.dataset.action,id:focused.dataset.id}:null;
   solarController?.destroy();solarController=null;
   const secondary=tab==='hubs'&&hub(selectedHub)?.kind==='control'?controlView():tab==='planner'?plannerView():tab==='logistics'?logisticsView():tab==='research'?researchView():tab==='software'?softwareView({catalog,state,softwareTab,softwareDraft,ordersDraft,softwareTest,dirtySoftware:!same(softwareDraft,savedSoftware()),dirtyOrders:!same(ordersDraft,state.orders),shipLabel:shipLabel()}):tab==='program'?programView({catalog,state,date:turnDate(state.turn)}):'';
+  const groundView=Boolean(activeSurface())&&(groundViewPinned||Boolean(selectedBuilding));
   const lightWorld=selectedWorld==='earth'?null:selectedWorld;
-  app.innerHTML=`<div class="campaign-app map-mode">${topbar()}<main class="map-main">${mapScreen({catalog,state,selectedWorld,selectedHub,selectedBuilding,selectedTile,pending,inspection:inspectionMatches()?inspection:null,mapMotion,date:turnDate(state.turn),lightMinutes:lightWorld?(catalog.lightMinutes?.[lightWorld]?.[(state.turn-1)%catalog.lightMinutes[lightWorld].length]??'—'):0,guide:guideCard()})}${secondary?`<div class="game-screen-dimmer"></div><section class="game-screen-panel"><button class="map-back" data-action="nav" data-id="system">← BACK TO MAP</button>${secondary}</section>`:''}</main></div>${solarOpen?solarSystemView({catalog,state,selected:solarSelected,showRoutes:solarRoutes,date:turnDate(state.turn)}):''}${modalMarkup()}`;
+  app.innerHTML=`<div class="campaign-app map-mode">${topbar()}<main class="map-main">${mapScreen({catalog,state,selectedWorld,selectedHub,selectedBuilding,selectedTile,pending,inspection:inspectionMatches()?inspection:null,mapMotion,groundView,date:turnDate(state.turn),lightMinutes:lightWorld?(catalog.lightMinutes?.[lightWorld]?.[(state.turn-1)%catalog.lightMinutes[lightWorld].length]??'—'):0,guide:guideCard()})}${secondary?`<div class="game-screen-dimmer"></div><section class="game-screen-panel"><button class="map-back" data-action="nav" data-id="system">← BACK TO MAP</button>${secondary}</section>`:''}</main></div>${solarOpen?solarSystemView({catalog,state,selected:solarSelected,showRoutes:solarRoutes,date:turnDate(state.turn)}):''}${modalMarkup()}`;
   if(panelScroll!==null){const fresh=document.querySelector('.game-screen-panel');if(fresh)fresh.scrollTop=panelScroll;}
   renderedTab=tab;
   document.querySelector('.campaign-app').inert=Boolean(modal||solarOpen);
   document.querySelector('[data-action="solar-open"]').setAttribute('aria-expanded',String(solarOpen));
-  mountGameMap();
+  mountGameMap(groundView);
   if(mapFocus)document.querySelector('#planet-map')?.focus({preventScroll:true});
   refreshInspection();
   if(tab==='research'){
@@ -508,6 +518,12 @@ app.addEventListener('click',async event=>{
     tab='logistics';render();return;
   }
   if(action==='map-plan'){const control=state.hubs.find(h=>h.world===selectedWorld&&h.kind==='control');if(control)draft.source=control.id;chooseDestination(control?(control.world==='earth'?'mars':'earth'):selectedWorld);return;}
+  if(action==='map-ground'){
+    groundViewPinned=!groundViewPinned;
+    render();
+    document.querySelector('[data-action="map-ground"]')?.focus({preventScroll:true});
+    return;
+  }
   if(action==='map-motion'){mapMotion=!mapMotion;render();return;}
   if(action==='survey-sector'){const h=activeSurface();if(h)await perform('explore',{hub:h.id,tile:selectedTile});return;}
   if(action==='construct-sector'){const h=activeSurface();if(h&&selectedBuilding){const previous=state;await perform('construct',{hub:h.id,tile:selectedTile,building:selectedBuilding});if(state!==previous)selectedBuilding=null;render();}return;}
@@ -525,6 +541,8 @@ app.addEventListener('click',async event=>{
   if(action==='confirm-launch'){modal=null;await perform('launch',{design:draft,confirm:true});return;}
   if(action==='guide-hide'){guideHidden=true;try{localStorage.setItem(GUIDE_KEY,'1');}catch{/* ignore */}render();return;}
   if(action==='prepare'){await perform('prepare',{forecast:id});return;}
+  if(action==='factory-mode'){const h=activeSurface();if(h)await perform('factoryMode',{hub:h.id,tile:selectedTile,mode:id});return;}
+  if(action==='repair-spares'){const h=activeSurface();if(h)await perform('repair',{hub:h.id,tile:Number(id),resource:'spares'});return;}
   if(action==='repair'){const surface=activeSurface();if(surface)await perform('repair',{hub:surface.id,tile:Number(id)});return;}
   if(action==='pick-computer'){softwareDraft={...softwareDraft,computer:id};softwareTest=null;render();return;}
   if(action.startsWith('rule-')){const kind=button.dataset.kind;if(kind==='software'){const config={...softwareConfig(catalog),slots:catalog.computers[softwareDraft.computer].slots};softwareDraft={...softwareDraft,rules:applyRuleAction(softwareDraft.rules,action,button.dataset,config)};softwareTest=null;}else{ordersDraft=applyRuleAction(ordersDraft,action,button.dataset,ordersConfig(catalog,state));}render();
@@ -593,6 +611,7 @@ app.addEventListener('change',async event=>{
   }
   if(!field)return;
   if(field.startsWith('part_')){const slot=field.slice(5);draft.parts={...draft.parts,[slot]:control.value};recentPart=slot;recentAt=Date.now();quote=null;render();refreshQuote();return;}
+  if(field==='useLocalSpares'){draft.useLocalSpares=control.checked;quote=null;render();refreshQuote();return;}
   if(field==='propellantKg'){draft.propellantKg=Math.max(0,Math.min(catalog.propellantMaxKg,Math.round(Number(control.value)||0)));quote=null;render();refreshQuote();return;}
   if(field==='hub'){selectedHub=control.value;selectedWorld=hub(selectedHub).world;selectedTile=mapCore();selectedBuilding=null;render();return;}
   if(field==='crew'){await perform('assignCrew',{hub:selectedHub,index:Number(control.dataset.index),assignment:control.value});return;}

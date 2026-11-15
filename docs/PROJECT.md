@@ -17,6 +17,8 @@
 
 - **Solar-system navigation (2026-11-14):** Replace the planet-list sidebar with an open/close solar-system navigator, selectable worlds, zoom/pan, hub and traffic details, and working map/mission shortcuts. Use the supplied solar-system image as the visual reference. Planet images must visibly orbit the Sun, with Europa orbiting Jupiter; moving line highlights alone do not satisfy the motion request.
 
+- **Colony economy (2026-11-15).** The user requested deeper building and resource decisions. Local fuel production, repair and fitting parts, supplier placement and configurable reserves implement that direction.
+
 - **Living isometric terrain (2026-11-14):** User selected this direction, requested more diversity including seas, removal of the rover mechanic, and deeper game logic. Implemented natural regions, elevation, site costs/yields, coastal water and a water-to-oxygen supply chain. Terrain/production is the implementation choice for depth; no additional preference was received.
 
 - **Larger maps (2026-11-14):** User requested more playable space. Each region now has nine times the area of the former 32×32 map, with the existing settlement centered and its progress retained.

@@ -17,7 +17,7 @@ from hashlib import sha256
 from math import ceil
 from typing import Any
 
-from . import faults, flight, orders, ship, surface
+from . import faults, flight, industry, orders, ship, surface
 from . import research as research_rules
 from .campaign_data import (
     ARRIVAL_SCENARIO, LEGACY_ARRIVAL_SCENARIO, PLANET_DANGERS, BUDGET_MAX, BUDGET_MIN, BUDGET_START, BUILDINGS, DARK_TURNS_TO_LOSE,
@@ -253,6 +253,12 @@ def validate(state: Any) -> dict:
                 if not isinstance(h.get("site"), str):
                     return {"ok": False, "error": "Invalid hub site."}
                 h["tiles"] = _tiles("earth", state["seed"], h["site"])
+    # Only the new local stock is absent from pre-industry saves. Leave the caller's save untouched.
+    if any(isinstance(h, dict) and isinstance(h.get("stocks"), dict) and "spares" not in h["stocks"] for h in state["hubs"]):
+        state = deepcopy(state)
+        for h in state["hubs"]:
+            if isinstance(h, dict) and isinstance(h.get("stocks"), dict):
+                h["stocks"].setdefault("spares", 0)
     hub_ids = set()
     for hub in state["hubs"]:
         if not isinstance(hub, dict) or hub.get("world") not in WORLDS or hub.get("kind") not in ("control", "orbital", "surface"):
@@ -262,6 +268,9 @@ def validate(state: Any) -> dict:
         hub_ids.add(hub["id"])
         if not isinstance(hub.get("stocks"), dict) or any(type(hub["stocks"].get(k)) is not int or not 0 <= hub["stocks"][k] <= MAX_RESOURCE for k in RESOURCE_KEYS):
             return {"ok": False, "error": "Invalid hub resources."}
+        balance = hub.get("lastBalance", {})
+        if not isinstance(balance, dict) or any(k not in RESOURCE_KEYS or type(v) is not int or abs(v) > MAX_RESOURCE for k, v in balance.items()):
+            return {"ok": False, "error": "Invalid local production balance."}
         if any(type(hub.get(key)) is not int or not 0 <= hub[key] <= 1_000_000 for key in ("surveyUntil", "discovered", "construction")):
             return {"ok": False, "error": "Invalid hub operations."}
         if type(hub.get("health")) is not int or not 0 <= hub["health"] <= 100:
@@ -279,6 +288,10 @@ def validate(state: Any) -> dict:
             building = tile.get("building")
             if building is not None and (not isinstance(building, dict) or building.get("type") not in (*BUILDINGS, "command", "habitat") or type(building.get("onlineFrom")) is not int or type(building.get("active")) is not bool):
                 return {"ok": False, "error": "Invalid constructed module."}
+            if building and building["type"] in industry.RECIPES:
+                if building.get("mode", "reserve") not in industry.MODES or ("lastBatch" in building and
+                        (not isinstance(building["lastBatch"], str) or building["lastBatch"] not in industry.RESULTS)):
+                    return {"ok": False, "error": "Invalid factory settings."}
     if any("biome" not in t or "elevation" not in t for h in state["hubs"] for t in h["tiles"]):
         state = deepcopy(state)
         for h in state["hubs"]:
@@ -506,8 +519,13 @@ def mission_quote(state: dict, design: Any) -> dict:
     if "propulsion" in state["tech"] or orbital_bonus:
         fuel = max(1, ceil(fuel * (0.85 if "propulsion" in state["tech"] else 1) * (0.82 if orbital_bonus else 1)))
     part_costs = {"materials": 0, "credits": 0} if ship.legacy(normalized) else ship.totals(normalized["parts"])
+    use_local = design.get("useLocalSpares", False)
+    if type(use_local) is not bool:
+        return {"ok": False, "error": "Choose whether to use local spare parts."}
+    spares = min(source["stocks"].get("spares", 0), part_costs["credits"] // industry.CREDITS_PER_SPARE) if use_local else 0
+    savings = spares * industry.CREDITS_PER_SPARE
     materials = hull["materials"] + engine["materials"] + sum(PAYLOADS[p]["materials"] for p in payload) + part_costs["materials"]
-    credits = hull["credits"] + FAULT_COMPUTERS[computer]["cost"] + (12 if kind == "surface" else 5) + part_costs["credits"]
+    credits = hull["credits"] + FAULT_COMPUTERS[computer]["cost"] + (12 if kind == "surface" else 5) + part_costs["credits"] - savings
     credits += LAUNCH_VEHICLES[vehicle]["credits"] if from_earth else 9 * max(1, round(base["transferDays"] / 90))
     software = _software_test(software_design, world, normalized, kind, world in state.get("softwareProfiles", {}))
     relays = {h["world"] for h in state["hubs"] if h["kind"] == "orbital" and _active(h)}
@@ -516,7 +534,7 @@ def mission_quote(state: dict, design: Any) -> dict:
         "ok": True, "source": source["id"], "destination": world,
         "objective": kind, "site": site, "rescue": rescue["id"] if rescue else None,
         "mass": carried, "capacity": hull["capacity"],
-        "materials": materials, "credits": credits, "fuel": fuel,
+        "materials": materials, "credits": credits, "fuel": fuel, "spares": spares, "creditSavings": savings,
         "turns": checked["turns"], "outcome": checked["outcome"], "checks": checked["checks"],
         "transfer": checked["transfer"], "arc": checked["arc"], "numbers": numbers, "vehicle": checked["vehicle"],
         "software": software, "lightMinutes": flight.light_minutes(world, state["turn"]),
@@ -547,6 +565,7 @@ def _launch(state: dict, design: Any, confirm: Any = False) -> dict:
     source = _hub_by_id(state, quote["source"])
     source["stocks"]["materials"] -= quote["materials"]
     source["stocks"]["fuel"] -= quote["fuel"]
+    source["stocks"]["spares"] -= quote["spares"]
     state["credits"] -= quote["credits"]
     mission_id = _next_id(state, "M")
     stored = {**deepcopy(design), "site": quote["site"], "vehicle": design.get("vehicle", "atlas_v_401"), "propellantKg": quote["numbers"]["propellantKg"]}
@@ -570,6 +589,7 @@ def _launch(state: dict, design: Any, confirm: Any = False) -> dict:
     if outcome == "scrub":
         source["stocks"]["materials"] = min(MAX_RESOURCE, source["stocks"]["materials"] + quote["materials"])
         source["stocks"]["fuel"] = min(MAX_RESOURCE, source["stocks"]["fuel"] + quote["fuel"])
+        source["stocks"]["spares"] += quote["spares"]
         mission.update(status="failed", outcome="scrubbed", arrivesAt=state["turn"])
         _report(mission, "launch", "Scrubbed: the transfer leaves Earth outside the rocket's allowed launch directions. The spacecraft and propellant were returned; the launch campaign's credits are spent.", False)
         state["stats"]["missionsFailed"] += 1
@@ -748,7 +768,7 @@ def _construction_plan(state: dict, hub: dict, tile_id: int, kind: str) -> dict:
         reason = "Greenhouses are available on Earth and Mars."
     elif hub["stocks"]["materials"] < materials or hub["stocks"]["energy"] < specs["energy"]:
         reason = f"Construction requires {materials} materials and {specs['energy']} energy."
-    return {"ok": not reason, "reason": reason, "materials": materials, "energy": specs["energy"], "turns": turns, "requiredTech": required, "siteCost": site_cost, **surface.production(hub, tile, kind, state["tech"])}
+    return {"ok": not reason, "reason": reason, "materials": materials, "energy": specs["energy"], "turns": turns, "requiredTech": required, "siteCost": site_cost, **surface.production(hub, tile, kind, state["tech"], state["turn"])}
 
 
 def inspect_surface(state: dict, hub_id: str, tile_id: Any) -> dict:
@@ -760,7 +780,7 @@ def inspect_surface(state: dict, hub_id: str, tile_id: Any) -> dict:
     return {"ok": True, "hub": hub_id, "tile": tile_id,
             "survey": _survey_plan(state, hub, tile_id),
             "buildings": {kind: _construction_plan(state, hub, tile_id, kind) for kind in BUILDINGS},
-            "facility": surface.production(hub, tile, tile["building"]["type"], state["tech"]) if tile["building"] else None}
+            "facility": surface.production(hub, tile, tile["building"]["type"], state["tech"], state["turn"]) if tile["building"] else None}
 
 
 def _construct(state: dict, hub_id: str, tile_id: Any, kind: str) -> dict:
@@ -874,13 +894,20 @@ def _operate_surface(state: dict, hub: dict) -> list[str]:
             stock["energy"] = min(MAX_RESOURCE, stock["energy"] + ceil(flow["outputs"]["energy"] * light * _output_factor(module)))
     science_gain = 0
     # Supply chain order is independent of the tiles on which facilities stand.
-    priority = {"extractor": 0, "recycler": 1, "greenhouse": 2, "heater": 3, "habitat": 4, "shield": 5, "drill": 6, "laboratory": 7}
+    priority = {"extractor": 0, "recycler": 1, "greenhouse": 2, "heater": 3, "habitat": 4, "shield": 5, "drill": 6,
+                "laboratory": 7, "propellant": 9, "machine_shop": 9}
     for tile_id, module in sorted(modules, key=lambda item: (priority.get(item[1]["type"], 8), item[0])):
         kind = module["type"]
         factor = _output_factor(module)
-        if not factor or kind in ("solar", "reactor", "command") or power_save and kind in ("laboratory", "drill", "extractor"):
+        if kind in ("solar", "reactor", "command"):
             continue
-        flow = surface.production(hub, hub["tiles"][tile_id], kind, state["tech"])
+        flow = surface.production(hub, hub["tiles"][tile_id], kind, state["tech"], turn)
+        if kind in industry.RECIPES:
+            module["lastBatch"] = industry.batch_result(stock, flow, module.get("mode", "reserve"), factor, power_save, MAX_RESOURCE)
+            if module["lastBatch"] != "made":
+                continue
+        elif not factor or power_save and kind in ("laboratory", "drill", "extractor"):
+            continue
         if any(stock[k] < amount for k, amount in flow["inputs"].items()):
             notes.append(f"Sector {tile_id+1}: {BUILDINGS.get(kind, {}).get('name', kind)} idle — insufficient inputs.")
             continue
@@ -1166,7 +1193,18 @@ def _prepare(state: dict, forecast_id: Any) -> dict:
     return _success(state, f"{hub['name']} prepared for the {forecast.get('kind', 'hazard').lower()} on turn {forecast['turn']}: damage will be halved.")
 
 
-def _repair(state: dict, hub_id: Any, tile_id: Any) -> dict:
+def _factory_mode(state: dict, hub_id: Any, tile_id: Any, mode: Any) -> dict:
+    hub = _hub_by_id(state, hub_id)
+    if not hub or not _active(hub) or type(tile_id) is not int or not 0 <= tile_id < len(hub["tiles"]) or mode not in industry.MODES:
+        return _fail(state, "Choose an operating hub, factory sector and production setting.")
+    building = hub["tiles"][tile_id]["building"]
+    if not building or building["type"] not in industry.RECIPES:
+        return _fail(state, "Only factories have batch controls.")
+    building["mode"] = mode
+    return _success(state, f"{BUILDINGS[building['type']]['name']}: {mode} setting saved for the next turn.")
+
+
+def _repair(state: dict, hub_id: Any, tile_id: Any, resource: str = "materials") -> dict:
     hub = _hub_by_id(state, hub_id)
     if not hub or not _has_surface(hub) or type(tile_id) is not int or not 0 <= tile_id < MAP_TILES:
         return _fail(state, "Choose a building to repair.")
@@ -1175,9 +1213,12 @@ def _repair(state: dict, hub_id: Any, tile_id: Any) -> dict:
     building = hub["tiles"][tile_id]["building"]
     if not building or building.get("condition", 100) >= 100:
         return _fail(state, "That sector has no worn building.")
-    if hub["stocks"]["materials"] < REPAIR_COST:
-        return _fail(state, f"Repairs need {REPAIR_COST} materials at {hub['name']}.")
-    hub["stocks"]["materials"] -= REPAIR_COST
+    if resource not in ("materials", "spares"):
+        return _fail(state, "Choose materials or spare parts for this repair.")
+    cost = industry.REPAIR_SPARES if resource == "spares" else REPAIR_COST
+    if hub["stocks"][resource] < cost:
+        return _fail(state, f"Repairs need {cost} {resource} at {hub['name']}.")
+    hub["stocks"][resource] -= cost
     building["condition"] = 100
     return _success(state, f"{building['type'].title()} in sector {tile_id + 1} repaired to 100%.")
 
@@ -1300,7 +1341,10 @@ def _advance(state: dict) -> dict:
     if state["event"]:
         return _fail(state, "Resolve the active environmental event first.")
     for hub in state["hubs"]:
+        before = hub["stocks"].copy()
         _operate_hub(state, hub)
+        # Operations only; deliveries and player spending are separate transactions.
+        hub["lastBalance"] = {k: hub["stocks"][k] - before[k] for k in RESOURCE_KEYS}
     state["turn"] += 1
     for mission in state["missions"]:
         if mission["status"] == "in_flight" and mission["arrivesAt"] <= state["turn"]:
@@ -1339,7 +1383,7 @@ def _advance(state: dict) -> dict:
     return _success(state, f"Turn {state['turn']} ({flight.turn_date(state['turn'])}): production, arrivals, hazards and research resolved.")
 
 
-ACTIONS = {"launch", "shipment", "explore", "construct", "assignCrew", "research", "eventChoice", "advance",
+ACTIONS = {"factoryMode", "launch", "shipment", "explore", "construct", "assignCrew", "research", "eventChoice", "advance",
            "setSoftware", "setOrders", "prepare", "repair"}
 
 
@@ -1373,8 +1417,10 @@ def execute(state: dict, action: str, args: Any) -> dict:
             return _set_orders(new, args)
         if action == "prepare":
             return _prepare(new, args.get("forecast"))
+        if action == "factoryMode":
+            return _factory_mode(new, args.get("hub"), args.get("tile"), args.get("mode"))
         if action == "repair":
-            return _repair(new, args.get("hub"), args.get("tile"))
+            return _repair(new, args.get("hub"), args.get("tile"), args.get("resource", "materials"))
         return _advance(new)
     except (KeyError, IndexError, TypeError, ValueError):
         return _fail(state, "Invalid command details. No game state was changed.")

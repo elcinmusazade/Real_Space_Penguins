@@ -1,0 +1,8 @@
+# Colony industry on the Shipyard branch
+
+- Added the Propellant Plant, Machine Shop and local spare parts in `ares/industry.py`, `campaign_data.py`, `surface.py` and `campaign.py`. Factories process complete batches with reserve controls, adjacency savings and condition-adjusted yields. Local stock changes are recorded per turn.
+- Connected parts to repairs, freight and optional Shipyard fitting discounts, including hardware returns after a scrub. Existing saves gain a zero spare-parts balance at each hub.
+- Updated `web/map-ui.js`, `planet-map.js`, `map-game.css`, `campaign.js` and `advisor.js` with factory art, operating controls, inventory changes, launch pricing and in-game guidance.
+- Added seven engine regressions in `tests/test_colony_industry.py`. Updated the surface, startup and research Node controller fixtures for the current AURA, tutorial and Shipyard imports. Checked factory controls and the Shipyard spare-parts choice. All ten focused checks passed.
+- Updated the README, project brief, architecture, decisions and status. The full suite ran 162 tests with 161 passes and the optional GMAT recomputation skipped. Python compilation, Node syntax and Git whitespace checks passed.
+- Verified the running local server, its 21 page and asset responses, and a Mars scan, paired build, production and pause through the HTTP API. In two 24-turn runs from the same Mars start, the reserve-mode Machine Shop made 44 spares and ended with 299 materials. Its paused counterpart ended with 387 materials and zero spares. Remote-crew balance and a visual browser playthrough remain open.

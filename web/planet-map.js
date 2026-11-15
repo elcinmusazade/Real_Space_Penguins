@@ -1,6 +1,7 @@
 /** Canvas strategy map. Geography comes from Python; atmospheric motion is cosmetic. */
 
 const W = 60, H = 30;
+export const facilitySymbols = {command:'⌂',habitat:'⌑',machine_shop:'⚙',propellant:'♨',reactor:'⚛',solar:'☀',extractor:'❄',greenhouse:'❀',laboratory:'⚗',heater:'♨',drill:'⚒',recycler:'♧',shield:'⬡'};
 const surfaces = {
   mars: {sky:'#130c14', land:'#795044', light:'#c18b68', dark:'#392a32', accent:'#ffb47b', ridge:'#aa7365', ice:'#86bdcb'},
   venus: {sky:'#241710', land:'#8b6348', light:'#e7b876', dark:'#4c342e', accent:'#ffe19c', ridge:'#c78c55', ice:'#c8bb92'},
@@ -90,7 +91,7 @@ class PlanetMap {
   pick(sx,sy){
     for(let i=(this.hits?.length||0)-1;i>=0;i--){
       const hit=this.hits[i],t=this.props.tiles[hit.index];
-      if(t?.building&&Math.abs(sx-hit.x)<20*this.cam.scale&&sy<hit.y&&sy>hit.y-53*this.cam.scale)return hit.index;
+      if(!this.props.groundView&&t?.revealed&&t.building&&Math.abs(sx-hit.x)<20*this.cam.scale&&sy<hit.y&&sy>hit.y-53*this.cam.scale)return hit.index;
       let inside=false;
       for(let a=0,b=3;a<4;b=a++){
         const [ax,ay]=hit.points[a],[bx,by]=hit.points[b];
@@ -129,7 +130,8 @@ class PlanetMap {
           const side=pt.points.slice(1);polygon(c,[...side,[side[2][0],side[2][1]+20*s],[side[1][0],side[1][1]+20*s],[side[0][0],side[0][1]+20*s]],mixed(base,'#06121d',.55));
         }
         if(water)base=mixed(base,biome==='ocean'?'#164059':'#71c0bd',Math.min(.35,(this.size-x)/this.size*.4));
-        polygon(c,pt.points,base,base,.65);
+        const showGrid=this.props.groundView && s>=.45;
+        polygon(c,pt.points,base,showGrid?mixed(base,'#d8e6dc',.32):base,.65);
         // Skip subpixel textures and scenery in the full-region overview.
         if(s>=.45){
         // Slight tonal grain, no permanent grid over the natural landscape.
@@ -184,7 +186,7 @@ class PlanetMap {
           const r=(7+hash(x,y,2)*10)*s;c.fillStyle=rgba('#142031',.15);c.strokeStyle=rgba('#ece3d6',.22);c.lineWidth=1.5*s;c.beginPath();c.ellipse(pt.x,pt.y,r,r*.46,0,0,Math.PI*2);c.fill();c.stroke();
         }
         c.restore();
-        if(!p.atmosphere&&!t.building&&!water)this.drawScenery(c,pt.x,pt.y,biome,x,y,s,time);
+        if(!this.props.groundView&&!p.atmosphere&&!t.building&&!water)this.drawScenery(c,pt.x,pt.y,biome,x,y,s,time);
         if(known&&t.terrain==='ice'&&!water){polygon(c,[[pt.x-7*s,pt.y],[pt.x,pt.y-5*s],[pt.x+7*s,pt.y],[pt.x,pt.y+3*s]],'#d5f6ef','#74c6de',s*.6);}
         if(known&&['science','salvage','hazard'].includes(t.terrain)){
           const colors={science:'#b8ede5',salvage:'#f2cc87',hazard:'#ff9476'};c.fillStyle=colors[t.terrain];c.font=`bold ${9*s}px monospace`;c.textAlign='center';c.fillText(t.terrain==='science'?'✧':t.terrain==='salvage'?'◇':'!',pt.x,pt.y+4*s);
@@ -196,7 +198,16 @@ class PlanetMap {
             const nx=x+dx,ny=y+dy,neighbor=nx>=0&&ny>=0?this.props.tiles[ny*this.size+nx]:null;
             if(neighbor?.building){const other=this.geometry(nx,ny);c.strokeStyle='#dfc69888';c.lineWidth=3*s;c.beginPath();c.moveTo(pt.x,pt.y);c.lineTo(other.x,other.y);c.stroke();}
           }
-          this.drawBuilding(c,pt.x,pt.y-3*s,t.building,s,p,motion?now:0);
+          if(this.props.groundView){
+            const footprint=pt.points.map(([px,py])=>[pt.x+(px-pt.x)*.58,pt.y+(py-pt.y)*.58]);
+            polygon(c,footprint,'#456170',t.building.onlineFrom>this.props.turn?'#edba83':'#b3d1d7',Math.max(.7,s));
+            if(s>=.75){
+              c.fillStyle='#e0f2f1';c.font=`bold ${9*s}px sans-serif`;c.textAlign='center';
+              c.fillText(facilitySymbols[t.building.type]||'◇',pt.x,pt.y+3*s);
+            }
+          }else{
+            this.drawBuilding(c,pt.x,pt.y-3*s,t.building,s,p,motion?now:0);
+          }
         }
         if(this.props.buildingMode&&known&&!t.building){polygon(c,pt.points,'#c4f1e80a',this.props.biomes?.[biome]?.blocked||t.terrain==='hazard'?'#e8756d60':'#d9eee735',.65*s);}
         if(index===this.hover||index===this.props.selection){polygon(c,pt.points,index===this.props.selection?'#c4f1e823':'#c4f1e810',index===this.props.selection?'#f4dfb1':'#d3e8e2',index===this.props.selection?2:1);}
@@ -254,6 +265,17 @@ class PlanetMap {
     else if(t==='habitat'||t==='command'){box(c,0,-13,28,19,18,'#b9d0d6','#738591');c.fillStyle='#2e617b';c.fillRect(-4,-34,8,5);c.strokeStyle='#f8b986';c.lineWidth=2;c.beginPath();c.moveTo(1,-34);c.lineTo(1,-45);c.stroke();}
     else if(t==='laboratory'){box(c,0,-10,27,17,18,'#aec1cd','#657681');c.fillStyle='#82e5f9';c.fillRect(-8,-27,16,6);}
     else if(t==='extractor'||t==='drill'){box(c,0,-12,22,14,19,'#b9b7aa','#7f7868');c.strokeStyle='#ffcc85';c.lineWidth=3;c.beginPath();c.moveTo(7,-23);c.lineTo(13,-37);c.stroke();}
+    else if(t==='propellant'){
+      for(const [cx,cy] of [[-9,-9],[8,-15]]){
+        c.fillStyle='#66858f';c.fillRect(cx-6,cy-16,12,19);c.fillStyle='#afd9de';c.beginPath();c.ellipse(cx,cy-16,6,3,0,0,Math.PI*2);c.fill();
+        c.fillStyle='#eac191';c.fillRect(cx-6,cy-8,12,3);
+      }
+      c.strokeStyle='#e4b987';c.lineWidth=2;c.beginPath();c.moveTo(-9,-6);c.lineTo(8,-10);c.stroke();
+    }
+    else if(t==='machine_shop'){
+      box(c,0,-10,31,18,14,'#8ca1a1','#52616b');box(c,-5,-20,13,9,9,'#e5af79','#936949');
+      c.strokeStyle='#f2cd93';c.lineWidth=3;c.beginPath();c.moveTo(7,-12);c.lineTo(12,-27);c.lineTo(4,-30);c.lineTo(2,-25);c.stroke();
+    }
     else if(t==='recycler'){box(c,-7,-9,12,12,22,'#bad6d8','#668a9e');box(c,8,-5,12,12,22,'#c7ddd2','#547e78');c.strokeStyle='#9ee9d7';c.lineWidth=2;c.beginPath();c.moveTo(-7,-21);c.lineTo(8,-17);c.stroke();}
     else if(t==='reactor'){box(c,0,-15,32,24,25,'#c6cec4','#617b7c');c.strokeStyle='#f1c28a';c.lineWidth=3;c.beginPath();c.ellipse(0,-29,10,6,0,0,Math.PI*2);c.stroke();c.fillStyle='#8addcb';c.fillRect(-5,-24,10,5);}
     else if(t==='heater'){box(c,0,-14,22,14,20,'#bd9991','#715c59');c.fillStyle='#ffb36b';c.fillRect(-7,-29,14,7);}

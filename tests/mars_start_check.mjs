@@ -4,6 +4,8 @@ import vm from 'node:vm';
 import {mapScreen} from '../web/map-ui.js';
 import {solarSystemView} from '../web/solar-system.js';
 import {guideSteps} from '../web/program-ui.js';
+import {advisorView,badgeCount} from '../web/advisor.js';
+import {shipSvg} from '../web/ship-view.js';
 
 const fixture=JSON.parse(readFileSync(0,'utf8'));
 const source=readFileSync(new URL('../web/campaign.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/initialize\(\);\s*$/,'');
@@ -15,11 +17,13 @@ async function session(previous){
   const context=vm.createContext({console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,
     localStorage:{getItem(){return null},setItem(){}},window:{setTimeout(){}},
     document:{activeElement:null,querySelector(s){return s==='#app'?app:el},querySelectorAll(){return []},addEventListener(){},createElement(){return {...el,remove(){}}}},
-    mountPlanetMap(){return {destroy(){}}},mountSolarSystem(){return {destroy(){}}},mapScreen,solarSystemView,guideSteps,
+    mountPlanetMap(){return {destroy(){}}},mountSolarSystem(){return {destroy(){}}},mapScreen,solarSystemView,guideSteps,advisorView,badgeCount,shipSvg,
+    createTutorial:()=>({sync(){},active:()=>false}),
     loadCampaign:async()=>structuredClone(previous),saveCampaign:async state=>saves.push(structuredClone(state)),
     apiStub:async(path,payload)=>{
       requests.push({path,payload});
-      if(path.endsWith('/catalog'))return {catalog:structuredClone(fixture.catalog)};
+      if(path.endsWith('/advice'))return {ok:true,items:[],counts:{critical:0,warning:0}};
+    if(path.endsWith('/catalog'))return {catalog:structuredClone(fixture.catalog)};
       if(path.endsWith('/new'))return {state:structuredClone(fixture.fresh)};
       if(path.endsWith('/validate'))return {ok:true,state:structuredClone(payload.state)};
       if(path.endsWith('/inspect'))return {...structuredClone(fixture.inspection),hub:payload.hub,tile:payload.tile};
@@ -30,7 +34,7 @@ async function session(previous){
   vm.runInContext(source+`\napi=apiStub;globalThis.initialize=initialize;globalThis.view=()=>({tab,selectedWorld,selectedHub,selectedTile,modal,solarOpen,freight,draft,state});`,context);
   await context.initialize();await tick();
   const click=async(action,id)=>{await handlers.click({target:{closest(){return {dataset:{action,id},disabled:false}}}});await tick();};
-  const change=async(field,value)=>{await handlers.change({target:{dataset:{field},value}});await tick();};
+  const change=async(field,value)=>{await handlers.change({target:{dataset:{field},value,checked:value===true}});await tick();};
   return {context,app,requests,saves,click,change};
 }
 function onMars(s,hubId='H1'){
@@ -70,7 +74,11 @@ assert.ok(!s.app.innerHTML.includes('data-action="shipment"'),'one-hub start mus
 await s.click('nav','planner');assert.equal(s.context.view().tab,'planner');
 assert.ok(s.app.innerHTML.includes('class="game-screen-panel"'));
 assert.ok(s.requests.some(r=>r.path.endsWith('/quote')));
-await s.click('assistant');assert.equal(s.context.view().modal,'intro','AURA remains available on request');
+assert.match(s.app.innerHTML,/Use local spare parts/);
+await s.change('useLocalSpares',true);
+assert.equal(s.requests.filter(r=>r.path.endsWith('/quote')).at(-1).payload.design.useLocalSpares,true);
+await s.click('assistant');assert.equal(s.context.view().modal,'advisor');
+await s.click('advisor-briefing');assert.equal(s.context.view().modal,'intro','AURA briefing remains available on request');
 await s.click('reset');assert.ok(s.app.innerHTML.includes('START ON MARS'));
 await s.click('confirm-reset');onMars(s);assert.equal(s.context.view().state.hubs.length,1);
 assert.equal(s.saves.at(-1).hubs.length,1);

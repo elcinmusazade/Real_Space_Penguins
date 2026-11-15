@@ -8,6 +8,7 @@ from hashlib import sha256
 from math import sin, floor
 
 from .campaign_data import ATMOSPHERIC_WORLDS, MAP_SIZE
+from . import industry
 
 BIOMES = {
     "settlement": {"name": "Landing plain", "color": "#9d956c"},
@@ -152,8 +153,11 @@ def coastal(hub, tile):
     return hub["world"] == "earth" and any(hub["tiles"][i].get("biome") in WATER for i in neighbors(tile["id"]))
 
 
-def production(hub, tile, kind, tech=()):
+def production(hub, tile, kind, tech=(), turn=1):
     """Nominal inputs/outputs used by both turn resolution and the inspector."""
+    if kind in industry.RECIPES:
+        adjacent = (hub["tiles"][i]["building"] for i in neighbors(tile["id"]))
+        return industry.flow(kind, adjacent, turn)
     spec = BIOMES.get(tile.get("biome"), {})
     atmosphere = hub["world"] in ATMOSPHERIC_WORLDS
     inputs, outputs, reasons = {}, {}, []

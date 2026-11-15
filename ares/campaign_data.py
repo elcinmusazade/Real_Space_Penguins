@@ -70,10 +70,12 @@ TRAJECTORIES = {
 BUILDINGS = {
     "solar": {"name": "Solar Array", "materials": 15, "energy": 0, "turns": 1, "description": "Generates energy; sunlight varies by destination."},
     "extractor": {"name": "Water Plant", "materials": 16, "energy": 3, "turns": 1, "description": "Extracts ice, or draws water from an adjacent Earth sea or lake. Coastal intake needs extra power."},
+    "propellant": {"name": "Propellant Plant", "materials": 24, "energy": 5, "turns": 2, "description": "Turns local water and power into fuel for launches and freight. Place beside a working water plant to save power."},
     "greenhouse": {"name": "Greenhouse", "materials": 18, "energy": 4, "turns": 2, "description": "Produces food on Earth and Mars; consumes water and power."},
     "laboratory": {"name": "Research Lab", "materials": 20, "energy": 4, "turns": 2, "description": "Produces science and processes surface samples."},
     "heater": {"name": "Thermal Control", "materials": 14, "energy": 3, "turns": 1, "description": "Maintains heat in inhabited outposts."},
     "drill": {"name": "Materials Drill", "materials": 18, "energy": 4, "turns": 2, "description": "Produces materials from local geology."},
+    "machine_shop": {"name": "Machine Shop", "materials": 22, "energy": 4, "turns": 2, "description": "Machines spare parts for repairs and spacecraft assembly. An adjacent operating drill reduces the energy cost."},
     "recycler": {"name": "Oxygen Plant", "materials": 22, "energy": 4, "turns": 2, "description": "Converts 2 water and 4 energy into 6 oxygen each turn. Water supply supports crew survival."},
     "shield": {"name": "Radiation Shield", "materials": 20, "energy": 2, "turns": 2, "description": "Reduces hazard impact on a hub."},
     "reactor": {"name": "Fission Reactor", "materials": 60, "energy": 10, "turns": 3, "description": "Steady power independent of sunlight: consumes water and materials. Requires Fission Power research."},
@@ -112,7 +114,7 @@ TECH_UNLOCKS = {
     "building": {"reactor": "fission"},
 }
 
-RESOURCE_KEYS = ("energy", "materials", "fuel", "water", "food", "oxygen", "heat")
+RESOURCE_KEYS = ("energy", "materials", "fuel", "water", "food", "oxygen", "heat", "spares")
 MAX_RESOURCE = 400
 MAP_SIZE = 96  # Large, independent explorable surface for every planetary hub.
 
@@ -283,7 +285,9 @@ def campaign_catalog() -> dict:
     from .flight import PROPELLANT_MAX_KG, table
     from .ship import catalog as ship_catalog
     from .surface import BIOMES, landscape
+    from .industry import RECIPES, RESERVES, RESULTS, REPAIR_SPARES, CREDITS_PER_SPARE
     base = catalog()
+    base["industry"] = {"recipes": RECIPES, "reserves": RESERVES, "results": RESULTS, "repairSpares": REPAIR_SPARES, "creditsPerSpare": CREDITS_PER_SPARE}
     base["biomes"] = BIOMES
     base["surfacePreviews"] = {w: [{"biome": b, "elevation": e} for b, e in landscape("ORBITAL", w, "Preview")] for w in WORLDS}
     base.update({

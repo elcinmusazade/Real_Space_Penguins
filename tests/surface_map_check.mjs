@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {setMaxListeners} from 'node:events';
 import {mountPlanetMap} from '../web/planet-map.js';
+import {badgeCount} from '../web/advisor.js';
 import {mapScreen} from '../web/map-ui.js';
 setMaxListeners(0);
 const fixture=JSON.parse(readFileSync(0,'utf8')),{state,catalog,inspection}=fixture;
@@ -59,6 +60,41 @@ map.props.motion=true;reduced.matches=true;assert.equal(drawing(0),drawing(1000)
 reduced.matches=false;document.hidden=true;assert.equal(drawing(0),drawing(1000));document.hidden=false;
 map.destroy();assert.equal(frames.size,0);assert.ok(observers.at(-1).disconnected);
 selected=null;dispatch(main,'keydown',{key:'ArrowRight'});assert.equal(selected,null,'destroy must remove handlers');
+// A roof and its broad hit area cover the center of the sector one diagonal behind it.
+const clusterSize=8;
+const clusterTiles=Array.from({length:clusterSize**2},(_,id)=>({id,revealed:true,elevation:1,biome:'settlement'}));
+const rearEmpty=2*clusterSize+2, rearFacility=2*clusterSize+3;
+for(const [id,type] of [[rearFacility,'solar'],[rearEmpty+clusterSize+1,'command'],[rearFacility+clusterSize+1,'laboratory']]){
+ clusterTiles[id].building={type,onlineFrom:1};
+}
+const clusterCanvas=canvas();
+const cluster=mountPlanetMap(clusterCanvas,null,{...props,world:'mars',hubId:'cluster',size:clusterSize,tiles:clusterTiles,onSelect:i=>selected=i});
+const paintBuilding=cluster.drawBuilding.bind(cluster);
+let models=0;
+cluster.drawBuilding=(...args)=>{models++;paintBuilding(...args);};
+for(const scale of [.5,1.25,3.2]){
+ cluster.cam.scale=scale;cluster.centerOn(3,3);
+ const back=cluster.geometry(2,2);
+ cluster.props.groundView=false;models=0;cluster.draw();
+ assert.equal(models,3);
+ assert.equal(cluster.pick(back.x,back.y),rearEmpty+clusterSize+1,'normal view allows roof selection');
+ cluster.props.groundView=true;models=0;calls=[];cluster.draw();
+ if(scale>=.75){
+  assert.ok(calls.some(([op,value])=>op==='fillText'&&value==='☀'),'flat facilities retain their identifying symbol');
+  assert.ok(calls.some(([op,value])=>op==='font'&&value===`bold ${9*scale}px sans-serif`));
+ }
+ assert.equal(models,0,'ground view must expose the rear sectors');
+ for(const [index,pointerType] of [[rearEmpty,'touch'],[rearFacility,'mouse']]){
+  const pt=cluster.geometry(index%clusterSize,Math.floor(index/clusterSize));
+  dispatch(clusterCanvas,'pointermove',{offsetX:pt.x,offsetY:pt.y});
+  assert.equal(cluster.hover,index);
+  selected=null;
+  dispatch(clusterCanvas,'pointerdown',{button:0,pointerId:1,pointerType,clientX:pt.x,clientY:pt.y});
+  dispatch(clusterCanvas,'pointerup',{pointerId:1,pointerType,clientX:pt.x,clientY:pt.y});
+  assert.equal(selected,index,'the rear sector under this pointer must be selected');
+ }
+}
+cluster.destroy();
 for(const world of Object.keys(catalog.worlds).filter(w=>w!=='earth')){
  const preview=mountPlanetMap(canvas(),null,{...props,world,tiles:catalog.surfacePreviews[world]});preview.draw(1000);assert.ok(preview.hits.length>100);
  if(catalog.worlds[world].mapLayer==='atmosphere'){
@@ -73,10 +109,19 @@ for(const world of Object.keys(catalog.worlds).filter(w=>w!=='earth')){
 }
 const screen=(overrides={})=>mapScreen({...fixture,selectedWorld:'earth',selectedHub:'H1',selectedTile:core+1,selectedBuilding:'greenhouse',pending:false,date:'TEST',lightMinutes:0,guide:'',...overrides});
 const html=screen();assert.ok(html.includes('data-action="construct-sector"'));assert.ok(html.includes('18 MAT'));assert.ok(html.includes('+8 food'));assert.ok(!/rover/i.test(html));
+assert.match(screen({selectedBuilding:null,groundView:false}),/data-action="map-ground"[^>]*aria-pressed="false"/);
+assert.match(screen({selectedBuilding:null,groundView:true}),/data-action="map-ground"[^>]*aria-pressed="true"/);
+assert.match(screen({selectedBuilding:'solar',groundView:true}),/data-action="map-ground"[^>]*disabled/);
 const scan=screen({selectedTile:0,selectedBuilding:null,inspection:{...inspection,survey:{ok:true,turns:3,energy:16,area:9}}});assert.ok(scan.includes('START REGIONAL SURVEY'));assert.ok(scan.includes('16 ENERGY'));
 assert.ok(screen({pending:true}).includes('data-action="construct-sector" disabled'));
 assert.ok(screen({inspection:{...inspection,buildings:{...inspection.buildings,greenhouse:{...inspection.buildings.greenhouse,ok:false,reason:'Test blocked'}}}}).includes('Test blocked'));
 assert.ok(screen({inspection:null}).includes('Reading site conditions'));
+const factoryState=structuredClone(state),factoryHub=factoryState.hubs[0];
+factoryHub.tiles[core+1].building={type:'machine_shop',onlineFrom:1,condition:80,active:true,mode:'pause',lastBatch:'paused'};
+factoryHub.stocks.spares=2;factoryHub.lastBalance={spares:2};
+const factory=screen({state:factoryState,selectedBuilding:null,inspection:{...inspection,facility:inspection.buildings.machine_shop}});
+assert.match(factory,/Paused by player/);assert.match(factory,/data-id="pause" aria-pressed="true"/);
+assert.match(factory,/REPAIR · 2 SPARE PARTS/);assert.match(factory,/\+2 last turn/);
 assert.equal(JSON.stringify(fixture),original,'rendering must not mutate authoritative state');
 console.log('Surface rendering, elevated picking, input, camera, motion, cleanup and cost inspector passed.');
 
@@ -85,9 +130,9 @@ const {default:vm}=await import('node:vm');
 const handlers={},requests=[],actions=[];
 const el={dataset:{},tagName:'BUTTON',inert:false,style:{},classList:{},setAttribute(){},focus(){},closest(){return null},querySelector(){return el},querySelectorAll(){return []}};
 const app={...el,innerHTML:'',addEventListener(type,callback){handlers[type]=callback}};
-const controllerContext=vm.createContext({console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,localStorage:{getItem(){return null},setItem(){}},document:{activeElement:el,querySelector(s){return s==='#app'?app:el},querySelectorAll(){return []},addEventListener(){}},mountPlanetMap(){return {}},mountSolarSystem(){return {destroy(){}}},mapScreen(){return ''},solarSystemView(){return ''},fixture:structuredClone(fixture),requests,actions});
+const controllerContext=vm.createContext({badgeCount,console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,localStorage:{getItem(){return null},setItem(){}},document:{activeElement:el,querySelector(s){return s==='#app'?app:el},querySelectorAll(){return []},addEventListener(){}},mapProps:{},mountPlanetMap(canvas,mini,props){controllerContext.mapProps=props;return {}},mountSolarSystem(){return {destroy(){}}},mapScreen(){return ''},solarSystemView(){return ''},fixture:structuredClone(fixture),requests,actions});
 let source=readFileSync(new URL('../web/campaign.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/initialize\(\);\s*$/,'');
-source+=`\nstate=fixture.state;catalog=fixture.catalog;selectedWorld='earth';selectedHub='H1';selectedTile=mapCore();modal=null;guideHidden=true;refreshQuote=()=>Promise.resolve();\napi=(path,payload)=>new Promise(resolve=>requests.push({path,payload,resolve}));perform=async(action,args)=>actions.push({action,args});globalThis.inspectState=()=>({selectedTile,selectedBuilding,inspection,mapMotion});globalThis.selectMapTile=selectMapTile;`;
+source+=`\nstate=fixture.state;catalog=fixture.catalog;selectedWorld='earth';selectedHub='H1';selectedTile=mapCore();modal=null;guideHidden=true;refreshQuote=()=>Promise.resolve();\napi=(path,payload)=>path.endsWith('/advice')?Promise.resolve({ok:true,items:[],counts:{critical:0,warning:0}}):new Promise(resolve=>requests.push({path,payload,resolve}));perform=async(action,args)=>actions.push({action,args});globalThis.inspectState=()=>({selectedTile,selectedBuilding,inspection,mapMotion});globalThis.selectMapTile=selectMapTile;`;
 vm.runInContext(source,controllerContext);
 async function click(action,id){await handlers.click({target:{closest(){return {dataset:{action,id},disabled:false}}}});}
 await controllerContext.selectMapTile(0);
@@ -98,16 +143,24 @@ requests[1].resolve({...inspection,tile:1});await new Promise(r=>setImmediate(r)
 assert.equal(controllerContext.inspectState().inspection.tile,1);
 requests[0].resolve({...inspection,tile:0});await new Promise(r=>setImmediate(r));
 assert.equal(controllerContext.inspectState().inspection.tile,1,'late response must not replace current sector');
+await click('map-ground');assert.equal(controllerContext.mapProps.groundView,true);
+await click('map-ground');assert.equal(controllerContext.mapProps.groundView,false);
 await click('survey-sector');assert.equal(actions.at(-1).action,'explore');assert.equal(actions.at(-1).args.tile,1);assert.equal(actions.at(-1).args.hub,'H1');
+await click('build-mode','recycler');assert.equal(controllerContext.mapProps.groundView,true,'placement enables footprints automatically');
+await click('cancel-build');assert.equal(controllerContext.mapProps.groundView,false);
+await click('map-ground');await click('build-mode','recycler');await click('cancel-build');
+assert.equal(controllerContext.mapProps.groundView,true,'manual ground view survives construction');
 await click('build-mode','recycler');await controllerContext.selectMapTile(core+1);assert.equal(actions.length,1);
 requests[2].resolve({...inspection,tile:core+1});await new Promise(r=>setImmediate(r));
 await click('construct-sector');assert.equal(actions.at(-1).action,'construct');assert.equal(actions.at(-1).args.building,'recycler');assert.equal(actions.at(-1).args.tile,core+1);
 await click('map-motion');assert.equal(controllerContext.inspectState().mapMotion,false);
 await controllerContext.selectMapTile(core);
-await click('solar-map','venus');
+await click('solar-map','venus');assert.equal(controllerContext.mapProps.groundView,false,'remote previews keep their full terrain');
 requests[3].resolve({...inspection,tile:core});await new Promise(r=>setImmediate(r));
 await click('solar-map','earth');
 assert.equal(requests.length,5,'returning from an uncolonized world must restart a discarded inspection');
 requests[4].resolve({...inspection,tile:core});await new Promise(r=>setImmediate(r));
 assert.equal(controllerContext.inspectState().inspection.tile,core);
+await click('factory-mode','pause');assert.equal(actions.at(-1).action,'factoryMode');assert.equal(actions.at(-1).args.mode,'pause');assert.equal(actions.at(-1).args.tile,core);
+await click('repair-spares',String(core));assert.equal(actions.at(-1).action,'repair');assert.equal(actions.at(-1).args.resource,'spares');
 console.log('Controller selection, separate survey/build actions, motion toggle and stale-request protection passed.');

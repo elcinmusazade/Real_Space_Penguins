@@ -5,6 +5,8 @@ import {techTreeView,TREE,treeLayout,treeEdges,ancestry} from '../web/tech-tree.
 import {mapScreen} from '../web/map-ui.js';
 import {solarSystemView} from '../web/solar-system.js';
 import {guideSteps} from '../web/program-ui.js';
+import {advisorView,badgeCount} from '../web/advisor.js';
+import {shipSvg} from '../web/ship-view.js';
 
 const f=JSON.parse(readFileSync(0,'utf8'));
 const before=JSON.stringify(f),layout=treeLayout(f.catalog);
@@ -56,10 +58,12 @@ const app={...el,innerHTML:'',addEventListener(type,callback){handlers[type]=cal
 const context=vm.createContext({console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,
   localStorage:{getItem(){return null},setItem(){}},window:{setTimeout(){}},
   document:{activeElement:null,querySelector(s){return s==='#app'?app:s==='.tech-viewport'?viewport:el},querySelectorAll(){return []},addEventListener(){},createElement(){return {...el,remove(){}}}},
-  mountPlanetMap(){return {destroy(){}}},mountSolarSystem(){return {destroy(){}}},mapScreen,solarSystemView,guideSteps,techTreeView,TREE,
+  mountPlanetMap(){return {destroy(){}}},mountSolarSystem(){return {destroy(){}}},mapScreen,solarSystemView,guideSteps,advisorView,badgeCount,shipSvg,
+    createTutorial:()=>({sync(){},active:()=>false}),techTreeView,TREE,
   loadCampaign:async()=>null,saveCampaign:async state=>saves.push(structuredClone(state)),
   apiStub:async(path,payload)=>{
     requests.push({path,payload});
+    if(path.endsWith('/advice'))return {ok:true,items:[],counts:{critical:0,warning:0}};
     if(path.endsWith('/catalog'))return {catalog:structuredClone(f.catalog)};
     if(path.endsWith('/new'))return {state:structuredClone(f.fresh)};
     if(path.endsWith('/inspect'))return {...structuredClone(f.inspection),hub:payload.hub,tile:payload.tile};
