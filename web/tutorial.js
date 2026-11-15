@@ -18,7 +18,19 @@ const revealed = h => h ? h.tiles.filter(t => t.revealed).length : 0;
 const built = h => h ? h.tiles.filter(t => t.building).length : 0;
 /** Status line for a Shipyard answer step: confirms the choice or names it. */
 const want = (ctx, test, label) => ctx.draft ? (test(ctx.draft) ? `✓ Set: ${label}.` : `Not yet: ${label}. Press SET IT FOR ME, or set it yourself.`) : '';
-const hasWindRule = sw => Boolean(sw?.rules?.some(r => r.then === 'descend' && r.when.some(c => c.sensor === 'wind' && c.op === '>' && c.value <= 60)));
+const hurricaneRule = {when: [{sensor: 'wind', op: '>', value: 55}], for: 1, then: 'descend'};
+const hasWindRule = design => Boolean(design?.rules.some(rule => {
+  const [condition] = rule.when;
+  return rule.then === 'descend' && (rule.for ?? 1) === 1 && rule.when.length === 1 &&
+    condition.sensor === 'wind' && condition.op === '>' && condition.value === hurricaneRule.when[0].value;
+}));
+function earthTarget(ctx, selector) {
+  if (ctx.tab !== 'software') return '[data-action="nav"][data-id="software"]';
+  if (ctx.softwareTab !== 'earth') return '[data-action="software-tab"][data-id="earth"]';
+  return selector;
+}
+const hasRoom = ctx => ctx.softwareDraft.rules.length < ctx.softwareSlots;
+const editingNewRule = ctx => ctx.addedRule >= 0 && ctx.softwareDraft.rules.length <= ctx.softwareSlots;
 
 /**
  * Each step: chapter, title, body, hint, target (CSS selector, first match that
@@ -143,15 +155,23 @@ export const STEPS = [
     body: 'Open <b>SOFTWARE</b>, then click the <b>Earth</b> tab.',
     hint: 'The Earth tab starts as a copy of your default rules. Changes there only affect ships flying to Earth.',
     done: ctx => ctx.tab === 'software' && ctx.softwareTab === 'earth'},
-  {chapter: 'First mission', title: 'Add the hurricane rule', action: true, target: ['[data-action="rule-add"][data-kind="software"]', '.software-columns'], goto: 'software',
-    body: 'Press <b>+ ADD RULE</b> and set it to exactly:<br><b>WHEN</b> Wind speed · above · <b>55</b><br><b>FOR</b> 1 turn in a row<br><b>THEN</b> Descend to calmer layer',
+  {chapter: 'First mission', title: 'Add the hurricane rule', action: true, goto: 'software',
+    target: ctx => earthTarget(ctx, editingNewRule(ctx) ? `.rule-card[data-kind="software"][data-rule="${ctx.addedRule}"]` :
+      hasRoom(ctx) ? '[data-action="rule-add"][data-kind="software"]' : '.computer-picker'),
+    answer: {earthRule: hurricaneRule}, answerLabel: 'SET IT UP FOR ME',
+    canAnswer: ctx => ctx.tab === 'software' && ctx.softwareTab === 'earth' && (editingNewRule(ctx) || hasRoom(ctx)),
+    body: 'Set the Earth rule to:<br><b>WHEN</b> Wind speed · above · <b>55</b><br><b>FOR</b> 1 turn in a row<br><b>THEN</b> Descend to calmer layer',
     science: 'Wind sensors give a spacecraft early warning, just as weather stations do. Getting out of the strongest gusts before they peak protects the instruments.',
-    status: ctx => hasWindRule(ctx.softwareDraft) ? '✓ Rule written. Continue to the lab test.' : '',
-    done: ctx => ctx.softwareTab === 'earth' && hasWindRule(ctx.softwareDraft)},
-  {chapter: 'First mission', title: 'Test and save', action: true, target: ['[data-action="software-save"]', '[data-action="software-test"]'], goto: 'software',
-    body: 'Press <b>RUN LAB TEST</b>: both Earth dangers should pass ✓. Then press <b>SAVE EARTH RULES</b>.',
-    hint: 'If the lab test still fails, check the number is 55 and the response is “Descend to calmer layer”.',
-    done: ctx => hasWindRule(ctx.state.softwareProfiles?.earth)},
+    status: ctx => ctx.tab !== 'software' || ctx.softwareTab !== 'earth' ? 'Open Software and select Earth.' :
+      editingNewRule(ctx) ? 'Edit the highlighted rule, or press Set it up for me to fill it in.' :
+      hasRoom(ctx) ? 'Press + Add Rule to start, or choose Set it up for me.' : 'All rule slots are in use. Choose a larger computer or delete an unused rule to make room.',
+    done: ctx => ctx.tab === 'software' && ctx.softwareTab === 'earth' && hasWindRule(ctx.softwareDraft)},
+  {chapter: 'First mission', title: 'Test and save', action: true, goto: 'software',
+    target: ctx => earthTarget(ctx, ctx.earthLabPassed ? '[data-action="software-save"]' : '[data-action="software-test"]'),
+    body: 'Press <b>RUN LAB TEST</b>. When both Earth dangers pass, press <b>SAVE EARTH RULES</b>.',
+    hint: 'If you need to restore the hurricane rule, choose Back and press Set it up for me.',
+    done: ctx => ctx.tab === 'software' && ctx.softwareTab === 'earth' && ctx.earthLabPassed &&
+      hasWindRule(ctx.state.softwareProfiles?.earth || ctx.state.software) && !ctx.dirtySoftware},
   {chapter: 'First mission', title: 'Launch!', action: true, target: ['[data-action="launch"]'], goto: 'planner',
     body: 'Back in the <b>SHIPYARD</b>, every line should be green. Press <b>LAUNCH</b> and watch the trajectory.',
     hint: 'If something turned red, use BACK to return to that step and press SET IT FOR ME.',
@@ -213,7 +233,7 @@ export function createTutorial(getContext, {suggest, answer, firstVisit = false}
     progress = {status: 'active', step: 0};
     persist(progress);
   }
-  let base = null, baseStep = -1, scrolledStep = -1, frame = 0, keyboard = false;
+  let base = null, baseStep = -1, scrolledTarget = null, frame = 0, keyboard = false;
   let userPos = null, dragging = false;
   try { userPos = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch { /* storage unavailable */ }
   const savePos = () => { try { userPos ? localStorage.setItem(POS_KEY, JSON.stringify(userPos)) : localStorage.removeItem(POS_KEY); } catch { /* ignore */ } };
@@ -225,18 +245,19 @@ export function createTutorial(getContext, {suggest, answer, firstVisit = false}
   const save = () => persist(progress);
 
   function target(current) {
-    for (const selector of current.target || []) {
+    const selectors = typeof current.target === 'function' ? [current.target(getContext())] : current.target || [];
+    for (const selector of selectors) {
       const el = document.querySelector(selector);
-      if (el && el.getClientRects().length) return el;
+      if (el && el.getClientRects().length) return {el, selector};
     }
-    return null;
+    return {};
   }
 
   function enterStep() {
     const ctx = getContext(), current = step();
     base = current.base ? current.base(ctx) : null;
     baseStep = progress.step;
-    scrolledStep = -1;
+    scrolledTarget = null;
   }
 
   function go(index) {
@@ -264,7 +285,7 @@ export function createTutorial(getContext, {suggest, answer, firstVisit = false}
         <div class="tut-buttons">${n > 0 ? '<button class="button secondary" data-tut="back">BACK</button>' : ''}
         ${missing && current.goto ? `<button class="button primary" data-tut="goto">TAKE ME THERE</button>` : ''}
         ${!missing && current.assist && suggest ? `<button class="button primary" data-tut="assist">SHOW ME</button>` : ''}
-        ${!missing && current.answer && answer ? `<button class="button primary" data-tut="answer">SET IT FOR ME</button>` : ''}
+        ${!missing && current.answer && answer ? `<button class="button primary" data-tut="answer" ${current.canAnswer && !current.canAnswer(getContext()) ? 'disabled' : ''}>${current.answerLabel || 'SET IT FOR ME'}</button>` : ''}
         ${current.action ? `<button class="button secondary" data-tut="next">SKIP STEP</button>` : `<button class="button primary" data-tut="next">${n === total - 1 ? 'FINISH' : 'NEXT'}</button>`}</div></div>`;
   }
 
@@ -314,7 +335,7 @@ export function createTutorial(getContext, {suggest, answer, firstVisit = false}
   function reposition() {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
-      if (progress.status === 'active' && root.firstChild) place(step().center ? null : target(step()));
+      if (progress.status === 'active' && root.firstChild) place(target(step()).el);
     });
   }
 
@@ -330,10 +351,10 @@ export function createTutorial(getContext, {suggest, answer, firstVisit = false}
       go(progress.step + 1);
       return;
     }
-    const el = current.center ? null : target(current);
-    if (el && scrolledStep !== progress.step) {
-      scrolledStep = progress.step;
-      if (!el.closest('.topbar') && !el.matches('#planet-map')) el.scrollIntoView({block: 'center', behavior: 'smooth'});
+    const {el, selector} = target(current);
+    if (el && selector !== scrolledTarget) {
+      scrolledTarget = selector;
+      if (!el.closest('.topbar') && !el.matches('#planet-map')) el.scrollIntoView({block: 'center', behavior: typeof current.target === 'function' ? 'instant' : 'smooth'});
     }
     root.innerHTML = `<div class="tut-spot ${current.action ? 'is-action' : ''}" aria-hidden="true"></div><div class="tut-card" role="dialog" aria-modal="false" aria-live="polite" aria-labelledby="tut-title">${cardMarkup(current, el)}</div>`;
     place(el);
@@ -391,6 +412,7 @@ export function createTutorial(getContext, {suggest, answer, firstVisit = false}
     sync,
     progress: () => ({...progress}),
     active: () => progress.status === 'active',
+    editingEarthRule: () => progress.status === 'active' && Boolean(step().answer?.earthRule),
     restart: () => go(0),
     resume: () => { progress = {...progress, status: 'active'}; save(); enterStep(); sync(); },
     close: () => { progress = {...progress, status: 'paused'}; save(); sync(); },

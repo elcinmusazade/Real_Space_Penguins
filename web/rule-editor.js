@@ -47,7 +47,7 @@ export function ruleEditor(rules, config) {
     const target = response?.target && config.instruments
       ? select(`data-rule-field="target" ${at}`, Object.entries(config.instruments).map(([id, s]) => [id, s.name]), rule.target || '', `Rule ${ri + 1} instrument`) : '';
     const hold = config.hasFor ? `<div class="rule-cond"><span class="rule-word">FOR</span>${select(`data-rule-field="for" ${at}`, Array.from({length: config.maxFor}, (_, i) => [i + 1, `${i + 1} turn${i ? 's' : ''} in a row`]), rule.for || 1, `Rule ${ri + 1} duration`)}</div>` : '';
-    return `<article class="rule-card"><div class="rule-head"><span class="rule-index">${ri + 1}</span><span class="rule-priority">${ri === 0 ? 'HIGHEST PRIORITY' : 'PRIORITY ' + (ri + 1)}</span>
+    return `<article class="rule-card" ${at}><div class="rule-head"><span class="rule-index">${ri + 1}</span><span class="rule-priority">${ri === 0 ? 'HIGHEST PRIORITY' : 'PRIORITY ' + (ri + 1)}</span>
       <span class="rule-tools"><button class="rule-mini" data-action="rule-up" ${at} ${ri === 0 ? 'disabled' : ''} aria-label="Move rule up">↑</button><button class="rule-mini" data-action="rule-down" ${at} ${ri === rules.length - 1 ? 'disabled' : ''} aria-label="Move rule down">↓</button><button class="rule-mini" data-action="rule-del" ${at} aria-label="Delete rule">✕</button></span></div>
       ${rule.when.map((_, ci) => conditionMarkup(rule, ri, ci, config)).join('')}
       ${rule.when.length < config.maxConditions ? `<button class="rule-add-cond" data-action="rule-cond-add" ${at}>+ AND condition</button>` : ''}

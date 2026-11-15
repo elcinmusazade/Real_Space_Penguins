@@ -32,6 +32,7 @@ const solarMotion={paused:false,elapsedMs:0};
 let modal=null, assistantTopic='welcome';
 let draft={source:'H1',destination:'earth',site:'Cape Canaveral',objective:'surface',hull:'lander',engine:'chemical',trajectory:'fast',payload:['survey'],vehicle:'atlas_v_401',propellantKg:300};
 let softwareDraft=null, ordersDraft=null, softwareTest=null, guideHidden=false;
+let addedRule=-1; // New flight-rule block being edited in the current draft.
 let softwareTab='default'; // Software screen: 'default' or a planet id
 let recentPart=null, recentAt=0, massDelta=null; // Shipyard feedback: which part just changed, and the launch-mass change it caused
 const GUIDE_KEY='ares.first-light.guide-hidden';
@@ -73,7 +74,8 @@ async function initialize() {
     if(!state)state=(await api('/api/campaign/new',{seed:'HORIZON-01'})).state;
     resetDrafts();
     openHome();
-    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection(),draft,softwareTab,softwareDraft}),{suggest:suggestTile,answer:applyAnswer,firstVisit:!previous});
+    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection(),draft,softwareTab,softwareDraft,addedRule,
+      softwareSlots:catalog.computers[softwareDraft.computer].slots,earthLabPassed:softwareTab==='earth'&&softwareTest?.results?.length>0&&softwareTest.passed===softwareTest.results.length,dirtySoftware:!same(softwareDraft,savedSoftware())}),{suggest:suggestTile,answer:applyAnswer,firstVisit:!previous});
     await save(); render();
   }catch(error){app.innerHTML=`<main class="error-page"><h1>Mission engine unavailable</h1><p>${esc(error.message)}</p><p>Run <code>python3 -m ares.server</code> from the project directory.</p><button onclick="location.reload()">Retry connection</button></main>`;}
 }
@@ -88,7 +90,8 @@ function openHome(){
   quote=null;quoteId++;
 }
 function savedSoftware(){return softwareTab!=='default'&&state.softwareProfiles?.[softwareTab]||state.software;}
-function resetDrafts(){softwareDraft=JSON.parse(JSON.stringify(savedSoftware()));ordersDraft=JSON.parse(JSON.stringify(state.orders));}
+function resetSoftwareDraft(){softwareDraft=JSON.parse(JSON.stringify(savedSoftware()));addedRule=-1;}
+function resetDrafts(){resetSoftwareDraft();ordersDraft=JSON.parse(JSON.stringify(state.orders));}
 function shipLabel(){const sc=catalog.ship;return `${catalog.hulls[draft.hull].name} · ${sc.parts.power[draft.parts.power].name} · ${sc.parts.thermal[draft.parts.thermal].name} · ${sc.parts.shielding[draft.parts.shielding].name}`;}
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 function turnDate(turn){const d=new Date(Date.UTC(...catalog.campaignStart.split('-').map((v,i)=>i===1?Number(v)-1:Number(v))));d.setUTCDate(d.getUTCDate()+catalog.turnDays*(turn-1));return d.toISOString().slice(0,10);}
@@ -164,9 +167,19 @@ function shipModel() {
   return {parts:draft.parts,hull:draft.hull,engine:draft.engine,payload:draft.payload,propellantKg:draft.propellantKg,names,
     changed:recentPart&&age<900?recentPart:null,changedAt:performance.now()-age};
 }
-/** Tutorial "SET IT FOR ME": fills Shipyard choices (UI draft only; Python still checks the plan). */
+/** Fill the tutorial's draft. Testing and saving use the normal game controls. */
 function applyAnswer(answer){
   if(!answer)return;
+  if(answer.earthRule){
+    if(tab!=='software'||softwareTab!=='earth')return;
+    const rules=softwareDraft.rules.slice();
+    const index=addedRule>=0?addedRule:rules.length;
+    const slots=catalog.computers[softwareDraft.computer].slots;
+    if(rules.length>slots||index>=slots)return;
+    rules[index]=structuredClone(answer.earthRule);
+    addedRule=index;
+    softwareDraft={...softwareDraft,rules};softwareTest=null;render();return;
+  }
   const {parts,...rest}=answer;
   if(rest.destination&&rest.destination!==draft.destination){draft.destination=rest.destination;selectedWorld=rest.destination;}
   Object.assign(draft,rest);
@@ -578,23 +591,41 @@ app.addEventListener('click',async event=>{
   if(action==='repair-spares'){const h=activeSurface();if(h)await perform('repair',{hub:h.id,tile:Number(id),resource:'spares'});return;}
   if(action==='repair'){const surface=activeSurface();if(surface)await perform('repair',{hub:surface.id,tile:Number(id)});return;}
   if(action==='pick-computer'){softwareDraft={...softwareDraft,computer:id};softwareTest=null;render();return;}
-  if(action.startsWith('rule-')){const kind=button.dataset.kind;if(kind==='software'){const config={...softwareConfig(catalog),slots:catalog.computers[softwareDraft.computer].slots};softwareDraft={...softwareDraft,rules:applyRuleAction(softwareDraft.rules,action,button.dataset,config)};softwareTest=null;}else{ordersDraft=applyRuleAction(ordersDraft,action,button.dataset,ordersConfig(catalog,state));}render();
+  if(action.startsWith('rule-')){
+    const kind=button.dataset.kind;
+    if(kind==='software'){
+      const config={...softwareConfig(catalog),slots:catalog.computers[softwareDraft.computer].slots};
+      const rules=applyRuleAction(softwareDraft.rules,action,button.dataset,config), index=Number(button.dataset.rule);
+      if(action==='rule-add'&&rules.length>softwareDraft.rules.length)addedRule=softwareTab==='earth'&&tutorial?.editingEarthRule()?rules.length-1:-1;
+      if(action==='rule-del'&&addedRule>=index)addedRule=addedRule===index?-1:addedRule-1;
+      if(action==='rule-up'||action==='rule-down'){
+        const other=index+(action==='rule-up'?-1:1);
+        if(addedRule===index)addedRule=other;
+        else if(addedRule===other)addedRule=index;
+      }
+      softwareDraft={...softwareDraft,rules};softwareTest=null;
+    }else{ordersDraft=applyRuleAction(ordersDraft,action,button.dataset,ordersConfig(catalog,state));}
+    render();
     const column=`.software-columns > section:${kind==='software'?'first':'last'}-child`,rule=Number(button.dataset.rule);
     if(action==='rule-add'){const card=[...document.querySelectorAll(`${column} .rule-card`)].at(-1);card?.scrollIntoView({block:'nearest',behavior:'smooth'});card?.querySelector('select')?.focus({preventScroll:true});}
     else{const target=action==='rule-up'?rule-1:action==='rule-down'?rule+1:rule;document.querySelector(`[data-action="${action}"][data-kind="${kind}"][data-rule="${target}"]:not(:disabled)`)?.focus({preventScroll:true});}
     return;}
-  if(action==='software-tab'){softwareTab=id;softwareTest=null;softwareDraft=JSON.parse(JSON.stringify(savedSoftware()));render();return;}
+  if(action==='software-tab'){softwareTab=id;softwareTest=null;resetSoftwareDraft();render();return;}
   if(action==='software-clear'){await perform('setSoftware',{world:softwareTab,clear:true});softwareTest=null;refreshQuote();return;}
   if(action==='software-test'){
     const shipPlan={parts:draft.parts,payload:draft.payload,objective:draft.objective};
+    const design=softwareDraft, world=softwareTab;
+    let result;
     try{
-      if(softwareTab==='default'){
+      if(world==='default'){
         const worlds=Object.keys(catalog.faults.planetDangers).filter(w=>!state.softwareProfiles?.[w]);
         const summary=[];
-        for(const w of worlds){const r=await api('/api/campaign/faults/test',{design:softwareDraft,world:w,ship:shipPlan});summary.push({world:w,passed:r.passed===r.results.length,results:r.results});}
-        softwareTest={ok:true,summary};
-      }else softwareTest=await api('/api/campaign/faults/test',{design:softwareDraft,world:softwareTab,ship:shipPlan});
-    }catch(error){softwareTest={ok:false,error:error.message};}
+        for(const w of worlds){const r=await api('/api/campaign/faults/test',{design,world:w,ship:shipPlan});summary.push({world:w,passed:r.passed===r.results.length,results:r.results});}
+        result={ok:true,summary};
+      }else result=await api('/api/campaign/faults/test',{design,world,ship:shipPlan});
+    }catch(error){result={ok:false,error:error.message};}
+    if(world!==softwareTab||design!==softwareDraft)return;
+    softwareTest=result;
     render();return;
   }
   if(action==='software-save'){await perform('setSoftware',softwareTab==='default'?softwareDraft:{...softwareDraft,world:softwareTab});refreshQuote();return;}

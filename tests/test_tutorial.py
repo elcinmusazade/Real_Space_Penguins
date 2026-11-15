@@ -6,6 +6,8 @@ check every anchor still exists in the browser code that renders it.
 """
 
 import re
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -15,6 +17,10 @@ SOURCES = "\n".join(p.read_text() for p in WEB.glob("*.js") if p.name != "tutori
 
 
 class TutorialTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("node"), "Tutorial interaction checks require Node")
+    def test_earth_hurricane_rule_lesson(self):
+        subprocess.run(["node", str(Path(__file__).with_name("tutorial_earth_rule_check.mjs"))], check=True)
+
     def test_every_step_has_text_and_a_way_forward(self):
         steps = TUTORIAL[TUTORIAL.index("export const STEPS"):TUTORIAL.index("export function loadProgress")]
         titles = re.findall(r"title: '([^']+)'", steps)
