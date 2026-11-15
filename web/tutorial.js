@@ -28,7 +28,7 @@ export const STEPS = [
     hint: 'This card is movable: drag it by its top bar (⠿) to anywhere it is not in the way, and it stays exactly where you put it. Close it any time with ✕; resume or restart from ⚙ Settings.'},
   {chapter: 'Welcome', title: 'Time and resources', target: ['.map-resources'],
     body: 'Science pays for research, credits pay for missions, and your budget adds credits every turn. <b>NEXT TURN</b> moves the calendar forward three months: buildings produce, ships travel, hazards strike.',
-    hint: 'There are no action points. Give as many orders as you like before ending the turn.'},
+    hint: 'Watch CR / TURN: it is your yearly budget, and the review board raises or cuts it based on your results.'},
   {chapter: 'Welcome', title: 'Your base and its stockpile', target: ['.map-inspector'],
     body: 'The inspector shows the selected sector and this hub’s stockpile: energy, materials, fuel, water, food, oxygen and heat. Every hub has its <b>own</b> stockpile. Resources only move between hubs when you ship them.',
     hint: 'Drag to pan the map, scroll to zoom, and use ▣ for the full overview.'},
