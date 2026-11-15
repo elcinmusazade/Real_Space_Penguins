@@ -16,6 +16,9 @@ const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 
 const revealed = h => h ? h.tiles.filter(t => t.revealed).length : 0;
 const built = h => h ? h.tiles.filter(t => t.building).length : 0;
+/** Status line for a Shipyard answer step: confirms the choice or names it. */
+const want = (ctx, test, label) => ctx.draft ? (test(ctx.draft) ? `✓ Set: ${label}.` : `Not yet: ${label}. Press SET IT FOR ME, or set it yourself.`) : '';
+const hasWindRule = sw => Boolean(sw?.rules?.some(r => r.then === 'descend' && r.when.some(c => c.sensor === 'wind' && c.op === '>' && c.value <= 60)));
 
 /**
  * Each step: chapter, title, body, hint, target (CSS selector, first match that
@@ -80,21 +83,78 @@ export const STEPS = [
     hint: 'Sheltering protects people and electronics but pauses labs and drills. Save your orders when done.'},
 
   {chapter: 'First mission', title: 'Open the Shipyard', action: true, target: ['[data-action="nav"][data-id="planner"]'],
-    body: 'Time for your first mission. Open the <b>SHIPYARD</b> to design a spacecraft.',
+    body: 'Time for your first mission: <b>land on Earth</b>. The next steps give you the exact answer for every choice, and the real science behind it. Open the <b>SHIPYARD</b>.',
     hint: 'The ⌁ icon in the top bar, or DESIGN MISSION on the map.',
     done: ctx => ctx.tab === 'planner'},
-  {chapter: 'First mission', title: 'Mission brief and spacecraft', target: ['.planner-form'], goto: 'planner',
-    body: 'Choose where you leave from, where you go, and what you do there: <b>land</b> a base, put a station in <b>orbit</b>, or fly a <b>science survey</b>. Then pick a hull, engine, trajectory and payload modules.',
-    hint: 'A first landing on Earth needs a lander hull and a Survey Station or habitat. Unneeded modules only add mass.'},
-  {chapter: 'First mission', title: 'Propellant', target: ['.propellant-field'], goto: 'planner',
-    body: 'Propellant lets the spacecraft brake and land when it arrives. More propellant also means a heavier spacecraft at launch.',
-    hint: 'Raise it until the landing check turns green; lower it if launch mass turns red.'},
-  {chapter: 'First mission', title: 'Launch checks', target: ['.check-list', '.quote-panel'], goto: 'planner',
-    body: 'Python checks launch direction, launch mass and delta-v, and lab-tests your flight software against the destination. A red check means the mission will be <b>scrubbed</b>, <b>stranded</b> in orbit, or <b>fly past</b> its target.',
-    hint: 'From Earth, launch windows follow the real planets (NASA GMAT data): watch the 12-turn strip for cheap transfers.'},
+  {chapter: 'First mission', title: 'Where: Cape Canaveral, Earth', target: ['.planner-form'], goto: 'planner',
+    answer: {destination: 'earth', objective: 'surface', site: 'Cape Canaveral'},
+    status: ctx => want(ctx, d => d.destination === 'earth' && d.objective === 'surface' && d.site === 'Cape Canaveral', 'Destination Earth · Land a base · Cape Canaveral'),
+    body: 'Set <b>Destination: Earth</b>, <b>Objective: Land a base</b>, <b>Site: Cape Canaveral</b>.',
+    science: 'Earth is the only world we know with liquid surface oceans and a thick nitrogen-oxygen atmosphere. Cape Canaveral is home to NASA’s Kennedy Space Center, where Apollo, the Space Shuttle and Artemis launched.'},
+  {chapter: 'First mission', title: 'Rocket: lander, chemical engine, fast transfer', target: ['[data-field="trajectory"]', '.planner-form'], goto: 'planner',
+    answer: {hull: 'lander', engine: 'chemical', trajectory: 'fast'},
+    status: ctx => want(ctx, d => d.hull === 'lander' && d.engine === 'chemical' && d.trajectory === 'fast', 'Horizon Lander · Bipropellant Engine · Fast transfer'),
+    body: 'Set <b>Hull: Horizon Lander</b>, <b>Engine: Bipropellant Engine</b>, <b>Trajectory: Fast transfer</b>.',
+    science: 'A chemical engine gives strong thrust in seconds, which a landing burn needs. Solar electric (ion) engines, like those on NASA’s Dawn and Psyche, are about ten times more efficient, but they push so gently that they cannot land. The fast transfer arrives in 3 turns and is the cheapest route here.'},
+  {chapter: 'First mission', title: 'Power: medium solar panels', target: ['[data-field="part_power"]'], goto: 'planner',
+    answer: {parts: {power: 'solar_m'}},
+    status: ctx => want(ctx, d => d.parts?.power === 'solar_m', 'Power: Solar panels (medium)'),
+    body: 'Set <b>Power: Solar panels (medium)</b>.',
+    science: 'At 1 AU, sunlight carries about 1,361 watts per square metre (the solar constant). Mars, at 1.5 AU, gets only 43% of that. Solar power works well out to Jupiter, where NASA’s Juno needs huge panels. Beyond that, missions such as Voyager and New Horizons carry nuclear RTGs.'},
+  {chapter: 'First mission', title: 'Heat control: basic insulation', target: ['[data-field="part_thermal"]'], goto: 'planner',
+    answer: {parts: {thermal: 'basic'}},
+    status: ctx => want(ctx, d => d.parts?.thermal === 'basic', 'Heat control: Basic insulation'),
+    body: 'Set <b>Heat control: Basic insulation</b>.',
+    science: 'Earth’s air and oceans store heat, so the surface stays between about −40 and 45 °C. The airless Moon swings from about −173 °C at night to 127 °C by day. Radiators and heaters would only add mass here.'},
+  {chapter: 'First mission', title: 'Radiation: no shielding', target: ['[data-field="part_shielding"]'], goto: 'planner',
+    answer: {parts: {shielding: 'none'}},
+    status: ctx => want(ctx, d => d.parts?.shielding === 'none', 'Radiation shield: No shielding'),
+    body: 'Set <b>Radiation shield: No shielding</b>.',
+    science: 'Earth’s magnetic field deflects the solar wind and traps charged particles in the Van Allen belts. The atmosphere above you weighs as much as a 10-metre layer of water. Together they block most space radiation. Mars has no global magnetic field and a thin atmosphere, so it scores higher (15/100) than Earth (5/100).'},
+  {chapter: 'First mission', title: 'Landing: aeroshell and parachute', target: ['[data-field="part_entry"]'], goto: 'planner',
+    answer: {parts: {entry: 'parachute'}},
+    status: ctx => want(ctx, d => d.parts?.entry === 'parachute', 'Landing system: Aeroshell + parachute'),
+    body: 'Set <b>Landing system: Aeroshell + parachute</b>.',
+    science: 'Earth’s surface pressure is about 160 times that of Mars. A heat shield turns arrival speed into heat (Orion’s shield reaches about 2,800 °C), then parachutes do the rest, as for Apollo, Orion and Dragon. On Mars the air is too thin for parachutes alone, so Perseverance also needed rockets and a sky crane.'},
+  {chapter: 'First mission', title: 'Hull: standard', target: ['[data-field="part_structure"]'], goto: 'planner',
+    answer: {parts: {structure: 'standard'}},
+    status: ctx => want(ctx, d => d.parts?.structure === 'standard', 'Hull strength: Standard hull'),
+    body: 'Set <b>Hull strength: Standard hull</b>.',
+    science: 'Earth’s air presses at 1 bar, which any spacecraft handles. Venus presses at about 92 bar, the pressure 900 m under the ocean. The Soviet Venera landers, built like diving bells, lasted only about two hours there.'},
+  {chapter: 'First mission', title: 'Antenna: small', target: ['[data-field="part_comms"]'], goto: 'planner',
+    answer: {parts: {comms: 'small'}},
+    status: ctx => want(ctx, d => d.parts?.comms === 'small', 'Antenna: Small antenna'),
+    body: 'Set <b>Antenna: Small antenna</b>.',
+    science: 'Radio signals weaken with the square of distance. A lander on Earth is right next to NASA’s Deep Space Network dishes in California, Spain and Australia, so a small antenna is plenty. Voyager 1, more than 160 AU away, needs a 3.7 m dish and the DSN’s 70 m antennas.'},
+  {chapter: 'First mission', title: 'Payload: Survey Station only', target: ['.payload-chips'], goto: 'planner',
+    answer: {payload: ['survey']},
+    status: ctx => want(ctx, d => d.payload?.length === 1 && d.payload[0] === 'survey', 'Payload: Survey Station only'),
+    body: 'Select <b>Survey Station</b> only. Deselect everything else, including Science Instruments.',
+    science: 'Every kilogram must be launched and slowed down again. The Survey Station is what sets up a base. Science Instruments fill the data store faster, and during the re-entry radio blackout that data would have nowhere to go. Add them on a later flight, with a Compress data rule.'},
+  {chapter: 'First mission', title: 'Propellant: 300 kg', target: ['.propellant-field'], goto: 'planner',
+    answer: {propellantKg: 300},
+    status: ctx => want(ctx, d => d.propellantKg === 300, 'Propellant: 300 kg'),
+    body: 'Set <b>Propellant</b> to <b>300 kg</b>.',
+    science: 'The ship reaches Earth at about 3 km/s, and the heat shield and parachute remove almost all of that speed for free (aerobraking). Rockets only handle the last 0.15 km/s. By the rocket equation, Δv = Isp · g₀ · ln(full mass ÷ empty mass), 300 kg gives about 0.58 km/s: nearly four times the need, without wasting launch mass.'},
+  {chapter: 'First mission', title: 'Read the launch checks', target: ['.check-list', '.quote-panel'], goto: 'planner',
+    body: 'Every rocket check should now be green, and <b>Built for Earth</b> should be ✓. One line is still red: <b>Earth flight rules</b>. Earth has two dangers, and your software must survive both.',
+    science: '<b>Re-entry blackout:</b> the shock wave heats the air into plasma, which blocks radio for several minutes (about three minutes for Apollo). <b>Hurricane:</b> NOAA’s National Hurricane Center counts winds above 119 km/h as hurricane force. Earth is the best-forecast world, so conditions there never exceed the lab test.'},
+  {chapter: 'First mission', title: 'Open Earth’s flight rules', action: true, target: ['[data-action="software-tab"][data-id="earth"]', '[data-action="nav"][data-id="software"]'], goto: 'software',
+    body: 'Open <b>SOFTWARE</b>, then click the <b>Earth</b> tab.',
+    hint: 'The Earth tab starts as a copy of your default rules. Changes there only affect ships flying to Earth.',
+    done: ctx => ctx.tab === 'software' && ctx.softwareTab === 'earth'},
+  {chapter: 'First mission', title: 'Add the hurricane rule', action: true, target: ['[data-action="rule-add"][data-kind="software"]', '.software-columns'], goto: 'software',
+    body: 'Press <b>+ ADD RULE</b> and set it to exactly:<br><b>WHEN</b> Wind speed · above · <b>55</b><br><b>FOR</b> 1 turn in a row<br><b>THEN</b> Descend to calmer layer',
+    science: 'Wind sensors give a spacecraft early warning, just as weather stations do. Getting out of the strongest gusts before they peak protects the instruments.',
+    status: ctx => hasWindRule(ctx.softwareDraft) ? '✓ Rule written. Continue to the lab test.' : '',
+    done: ctx => ctx.softwareTab === 'earth' && hasWindRule(ctx.softwareDraft)},
+  {chapter: 'First mission', title: 'Test and save', action: true, target: ['[data-action="software-save"]', '[data-action="software-test"]'], goto: 'software',
+    body: 'Press <b>RUN LAB TEST</b>: both Earth dangers should pass ✓. Then press <b>SAVE EARTH RULES</b>.',
+    hint: 'If the lab test still fails, check the number is 55 and the response is “Descend to calmer layer”.',
+    done: ctx => hasWindRule(ctx.state.softwareProfiles?.earth)},
   {chapter: 'First mission', title: 'Launch!', action: true, target: ['[data-action="launch"]'], goto: 'planner',
-    body: 'When the checks are green, press <b>AUTHORIZE LAUNCH</b> and watch the trajectory.',
-    hint: 'LAUNCH ANYWAY flies a failing plan after a warning. You will see what happens, but it costs credits.',
+    body: 'Back in the <b>SHIPYARD</b>, every line should be green. Press <b>LAUNCH</b> and watch the trajectory.',
+    hint: 'If something turned red, use BACK to return to that step and press SET IT FOR ME.',
     base: ctx => ctx.state.missions.length, done: (ctx, base) => ctx.state.missions.length > base},
   {chapter: 'First mission', title: 'Fly to arrival', target: ['.hud-next-turn'],
     body: 'Advance turns until the spacecraft arrives. The arrival plays out with your flight software, then a debrief explains exactly what happened and why.',
@@ -188,6 +248,7 @@ export function createTutorial(getContext, actions = {}) {
 <button class="tut-close" data-tut="move" aria-label="Move tutorial card with arrow keys" title="Drag the top bar, or focus here and use arrow keys">✥</button><button class="tut-close" data-tut="close" aria-label="Close tutorial">✕</button></div>
       <h2 id="tut-title">${esc(current.title)}</h2>
       <p class="tut-body">${current.body}</p>
+      ${current.science ? `<p class="tut-science"><span>🔭 THE SCIENCE</span>${current.science}</p>` : ''}
       ${current.hint ? `<p class="tut-hint"><span aria-hidden="true">💡</span> ${esc(current.hint)}</p>` : ''}
       ${current.status && current.status(getContext()) ? `<p class="tut-status">${esc(current.status(getContext()))}</p>` : ''}
       ${missing ? `<p class="tut-wait">This part of the screen is not open yet.</p>` : waiting ? `<p class="tut-wait"><span class="tut-pulse" aria-hidden="true"></span>Your turn: do this to continue.</p>` : ''}
@@ -196,6 +257,7 @@ export function createTutorial(getContext, actions = {}) {
         <div class="tut-buttons">${n > 0 ? '<button class="button secondary" data-tut="back">BACK</button>' : ''}
         ${missing && current.goto ? `<button class="button primary" data-tut="goto">TAKE ME THERE</button>` : ''}
         ${!missing && current.assist && actions.suggest ? `<button class="button primary" data-tut="assist">SHOW ME</button>` : ''}
+        ${!missing && current.answer && actions.answer ? `<button class="button primary" data-tut="answer">SET IT FOR ME</button>` : ''}
         ${current.action ? `<button class="button secondary" data-tut="next">SKIP STEP</button>` : `<button class="button primary" data-tut="next">${n === total - 1 ? 'FINISH' : 'NEXT'}</button>`}</div></div>`;
   }
 
@@ -297,6 +359,7 @@ export function createTutorial(getContext, actions = {}) {
     else if (what === 'next') go(progress.step + 1);
     else if (what === 'back') go(Math.max(0, progress.step - 1));
     else if (what === 'assist') { if (!actions.suggest?.(step().assist)) { const note = root.querySelector('.tut-status'); if (note) note.textContent = 'No suitable sector is visible right now. Try scanning or zooming out.'; } }
+    else if (what === 'answer') actions.answer?.(step().answer);
     else if (what === 'goto') document.querySelector(`[data-action="nav"][data-id="${step().goto}"]`)?.click();
   });
   root.addEventListener('pointerdown', event => {

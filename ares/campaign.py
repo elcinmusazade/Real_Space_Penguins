@@ -23,7 +23,7 @@ from .campaign_data import (
     ARRIVAL_SCENARIO, LEGACY_ARRIVAL_SCENARIO, PLANET_DANGERS, BUDGET_MAX, BUDGET_MIN, BUDGET_START, BUILDINGS, DARK_TURNS_TO_LOSE,
     ENGINES, EXAMPLE_ORDERS, FORECAST_LEAD, GOALS, HAZARDS, HULLS, LAUNCH_VEHICLES, MAX_RESOURCE,
     ATMOSPHERIC_WORLDS, PAYLOADS, PREPARE_COST, REPAIR_COST, RESEARCH, RESOURCE_KEYS, REVIEW_EVERY, ROUTES,
-    SCENARIO_INTENSITY, TRAJECTORIES, WEAR, WORLDS, MAP_SIZE,
+    SCENARIO_INTENSITY, TRAJECTORIES, intensity_range, WEAR, WORLDS, MAP_SIZE,
 )
 from .fault_data import FAULT_COMPUTERS, FAULT_EXAMPLE_RULES
 
@@ -420,7 +420,7 @@ def dangers_for(world: str, design: dict | None) -> list[str]:
 def _software_test(software: dict, world: str, design: dict | None = None, objective: str = "surface", own: bool = False) -> dict:
     """Lab-test the rules against every danger of the planet, flying this ship. All must pass."""
     profile = ship.sim_profile(design, world, objective)
-    runs = [(faults.simulate(software, s, 1.0, profile), faults.simulate(software, s, SCENARIO_INTENSITY[1], profile)) for s in dangers_for(world, design)]
+    runs = [(faults.simulate(software, s, 1.0, profile), faults.simulate(software, s, intensity_range(world)[1], profile)) for s in dangers_for(world, design)]
     worst = next((n for n, _ in runs if not n["passed"]), runs[0][0])
     return {"scenario": worst["scenario"], "name": " / ".join(n["name"] for n, _ in runs), "description": worst["description"],
             "dangers": [{"scenario": n["scenario"], "name": n["name"], "passed": n["passed"], "harsh": h["passed"], "lost": n["lost"], "science": n["science"], "target": n["target"]} for n, h in runs],
@@ -578,7 +578,7 @@ def _launch(state: dict, design: Any, confirm: Any = False) -> dict:
         "arrivesAt": state["turn"] + quote["turns"], "status": "in_flight",
         "riskPercent": 0, "result": None, "outcome": None, "report": [],
         "launchOutcome": "go", "software": deepcopy(software_for(state, quote["destination"])), "fit": quote["fit"],
-        "intensity": round(SCENARIO_INTENSITY[0] + (SCENARIO_INTENSITY[1] - SCENARIO_INTENSITY[0]) * _roll(state["seed"], mission_id, "intensity"), 3),
+        "intensity": round(intensity_range(quote["destination"])[0] + (intensity_range(quote["destination"])[1] - intensity_range(quote["destination"])[0]) * _roll(state["seed"], mission_id, "intensity"), 3),
         "transfer": quote["transfer"], "numbers": quote["numbers"], "arc": quote["arc"],
     }
     for check in quote["checks"]:

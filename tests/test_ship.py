@@ -164,5 +164,26 @@ class PlanetSoftwareTests(unittest.TestCase):
         self.assertNotIn("radar", result["health"])
 
 
+class TutorialEarthAnswerTests(unittest.TestCase):
+    """The exact first mission the tutorial teaches must pass every check."""
+
+    def test_tutorial_answer_is_all_green(self):
+        state = campaign.create_campaign("TUTORIAL-EARTH")
+        wind = {"when": [cond("wind", ">", 55)], "for": 1, "then": "descend"}
+        state = campaign.execute(state, "setSoftware", {"world": "earth", "computer": "standard", "rules": state["software"]["rules"] + [wind]})["state"]
+        design = lander("earth", payload=["survey"], propellant=300)
+        design.update(site="Cape Canaveral", trajectory="fast")
+        quote = campaign.mission_quote(state, design)
+        self.assertTrue(quote["ok"] and quote["affordable"])
+        self.assertEqual(quote["outcome"], "go")
+        self.assertEqual(quote["fit"]["status"], "ok")
+        self.assertTrue(quote["software"]["passedNominal"] and quote["software"]["passedHarsh"])
+
+    def test_earth_conditions_never_exceed_the_lab_test(self):
+        from ares.campaign_data import intensity_range
+        self.assertLessEqual(intensity_range("earth")[1], 1.0)
+        self.assertGreater(intensity_range("mars")[1], 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
