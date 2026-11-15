@@ -33,6 +33,7 @@ const GUIDE_KEY='ares.first-light.guide-hidden';
 try{guideHidden=localStorage.getItem(GUIDE_KEY)==='1';}catch{/* storage unavailable */}
 let freight={source:'H1',target:'',resource:'materials',amount:20};
 let tutorial=null;
+let renderedTab=null; // tab shown by the previous render, so scroll survives redraws of the same screen
 let advice=null, adviceState=null, adviceRequest=0, adviceTopic='basics';
 
 async function api(path, payload) {
@@ -354,6 +355,7 @@ function mountGameMap(){
 function render(){
   if(!state||!catalog)return;
   const focused=document.activeElement;
+  const panel=document.querySelector('.game-screen-panel'),panelScroll=panel&&renderedTab===tab?panel.scrollTop:null;
   const tree=document.querySelector('.tech-viewport'),treeScroll=tree?{left:tree.scrollLeft,top:tree.scrollTop}:null;
   const techFocus=focused?.closest('.rd-screen')?{action:focused.dataset.action,id:focused.dataset.id}:null;
   const mapFocus=focused?.id==='planet-map';
@@ -362,6 +364,8 @@ function render(){
   const secondary=tab==='hubs'&&hub(selectedHub)?.kind==='control'?controlView():tab==='planner'?plannerView():tab==='logistics'?logisticsView():tab==='research'?researchView():tab==='software'?softwareView({catalog,state,softwareDraft,ordersDraft,softwareTest,dirtySoftware:!same(softwareDraft,state.software),dirtyOrders:!same(ordersDraft,state.orders)}):tab==='program'?programView({catalog,state,date:turnDate(state.turn)}):'';
   const lightWorld=selectedWorld==='earth'?null:selectedWorld;
   app.innerHTML=`<div class="campaign-app map-mode">${topbar()}<main class="map-main">${mapScreen({catalog,state,selectedWorld,selectedHub,selectedBuilding,selectedTile,pending,inspection:inspectionMatches()?inspection:null,mapMotion,date:turnDate(state.turn),lightMinutes:lightWorld?(catalog.lightMinutes?.[lightWorld]?.[(state.turn-1)%catalog.lightMinutes[lightWorld].length]??'—'):0,guide:guideCard()})}${secondary?`<div class="game-screen-dimmer"></div><section class="game-screen-panel"><button class="map-back" data-action="nav" data-id="system">← BACK TO MAP</button>${secondary}</section>`:''}</main></div>${solarOpen?solarSystemView({catalog,state,selected:solarSelected,showRoutes:solarRoutes,date:turnDate(state.turn)}):''}${modalMarkup()}`;
+  if(panelScroll!==null){const fresh=document.querySelector('.game-screen-panel');if(fresh)fresh.scrollTop=panelScroll;}
+  renderedTab=tab;
   document.querySelector('.campaign-app').inert=Boolean(modal||solarOpen);
   document.querySelector('[data-action="solar-open"]').setAttribute('aria-expanded',String(solarOpen));
   mountGameMap();
@@ -497,7 +501,11 @@ app.addEventListener('click',async event=>{
   if(action==='prepare'){await perform('prepare',{forecast:id});return;}
   if(action==='repair'){const surface=activeSurface();if(surface)await perform('repair',{hub:surface.id,tile:Number(id)});return;}
   if(action==='pick-computer'){softwareDraft={...softwareDraft,computer:id};softwareTest=null;render();return;}
-  if(action.startsWith('rule-')){const kind=button.dataset.kind;if(kind==='software'){const config={...softwareConfig(catalog),slots:catalog.computers[softwareDraft.computer].slots};softwareDraft={...softwareDraft,rules:applyRuleAction(softwareDraft.rules,action,button.dataset,config)};softwareTest=null;}else{ordersDraft=applyRuleAction(ordersDraft,action,button.dataset,ordersConfig(catalog,state));}render();return;}
+  if(action.startsWith('rule-')){const kind=button.dataset.kind;if(kind==='software'){const config={...softwareConfig(catalog),slots:catalog.computers[softwareDraft.computer].slots};softwareDraft={...softwareDraft,rules:applyRuleAction(softwareDraft.rules,action,button.dataset,config)};softwareTest=null;}else{ordersDraft=applyRuleAction(ordersDraft,action,button.dataset,ordersConfig(catalog,state));}render();
+    const column=`.software-columns > section:${kind==='software'?'first':'last'}-child`,rule=Number(button.dataset.rule);
+    if(action==='rule-add'){const card=[...document.querySelectorAll(`${column} .rule-card`)].at(-1);card?.scrollIntoView({block:'nearest',behavior:'smooth'});card?.querySelector('select')?.focus({preventScroll:true});}
+    else{const target=action==='rule-up'?rule-1:action==='rule-down'?rule+1:rule;document.querySelector(`[data-action="${action}"][data-kind="${kind}"][data-rule="${target}"]:not(:disabled)`)?.focus({preventScroll:true});}
+    return;}
   if(action==='software-test'){try{softwareTest=await api('/api/campaign/faults/test',{design:softwareDraft});}catch(error){softwareTest={ok:false,error:error.message};}render();return;}
   if(action==='software-save'){await perform('setSoftware',softwareDraft);refreshQuote();return;}
   if(action==='orders-save'){await perform('setOrders',{rules:ordersDraft});return;}
@@ -539,7 +547,10 @@ app.addEventListener('change',async event=>{
   if(control.dataset.ruleField){
     if(control.dataset.kind==='software'){softwareDraft={...softwareDraft,rules:applyRuleField(softwareDraft.rules,control.dataset,control.value,softwareConfig(catalog))};softwareTest=null;}
     else ordersDraft=applyRuleField(ordersDraft,control.dataset,control.value,ordersConfig(catalog,state));
-    render();return;
+    const {kind,rule,cond,ruleField}=control.dataset;
+    render();
+    document.querySelector(`[data-kind="${kind}"][data-rule="${rule}"]${cond!==undefined?`[data-cond="${cond}"]`:''}[data-rule-field="${ruleField}"]`)?.focus({preventScroll:true});
+    return;
   }
   if(!field)return;
   if(field==='propellantKg'){draft.propellantKg=Math.max(0,Math.min(catalog.propellantMaxKg,Math.round(Number(control.value)||0)));quote=null;render();refreshQuote();return;}
