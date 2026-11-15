@@ -6,15 +6,20 @@
 .tut-spot{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px #030910a8;border:2px solid var(--amber,#e9ab7b);transition:left .25s,top .25s,width .25s,height .25s;pointer-events:none}
 .tut-spot.is-action{animation:tut-ring 1.6s ease-in-out infinite}
 @keyframes tut-ring{0%,100%{border-color:#e9ab7b;outline:0 solid #e9ab7b55}50%{border-color:#ffd2ad;outline:6px solid #e9ab7b33}}
-.tut-card{position:fixed;width:min(380px,calc(100vw - 24px));pointer-events:auto;background:#0d1c2b;border:1px solid #4d6c7e;border-top:3px solid var(--amber,#e9ab7b);border-radius:14px;padding:14px 16px 12px;box-shadow:0 24px 70px #000c;color:var(--text,#ecf2f5)}
-.tut-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tut-card{position:fixed;width:min(350px,calc(100vw - 24px));pointer-events:auto;background:#0d1c2b;border:1px solid #4d6c7e;border-top:3px solid var(--amber,#e9ab7b);border-radius:14px;padding:14px 16px 12px;box-shadow:0 24px 70px #000c;color:var(--text,#ecf2f5)}
+.tut-head{display:flex;align-items:center;gap:4px;margin:-6px -6px 0;padding:4px 6px;border-radius:9px;cursor:grab;touch-action:none;user-select:none}
+.tut-head:hover{background:#ffffff08}
+.tut-card.is-dragging{box-shadow:0 30px 90px #000e;opacity:.96}
+.tut-card.is-dragging .tut-head{cursor:grabbing}
+.tut-grip{color:var(--muted,#8ba5b3);font-size:14px;letter-spacing:-2px;margin-right:4px}
+.tut-chapter{flex:1}
 .tut-chapter{font-size:9px;letter-spacing:1.8px;font-weight:800;color:var(--aqua,#87cfce)}
 .tut-close{border:0;background:none;color:var(--muted,#8ba5b3);font-size:14px;width:28px;height:28px;border-radius:7px}
 .tut-close:hover{background:#ffffff12;color:var(--text,#ecf2f5)}
 .tut-card h2{font-size:18px;margin:6px 0 6px;letter-spacing:-.3px}
-.tut-body{font-size:13px;line-height:1.6;color:#cfdde4;margin:0 0 8px}
+.tut-body{font-size:12.5px;line-height:1.55;color:#cfdde4;margin:0 0 8px}
 .tut-body b{color:#fff}
-.tut-hint{font-size:12px;line-height:1.5;color:#e9cfa8;background:#e9ab7b14;border:1px solid #e9ab7b33;border-radius:9px;padding:7px 9px;margin:0 0 8px}
+.tut-hint{font-size:11.5px;line-height:1.5;color:#e9cfa8;background:#e9ab7b14;border:1px solid #e9ab7b33;border-radius:9px;padding:7px 9px;margin:0 0 8px}
 .tut-wait{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--good,#a7d9b2);margin:0 0 8px}
 .tut-pulse{width:9px;height:9px;border-radius:50%;background:var(--good,#a7d9b2);animation:tut-pulse 1.2s ease-in-out infinite}
 @keyframes tut-pulse{50%{opacity:.25;transform:scale(.7)}}

@@ -9,6 +9,9 @@
  */
 
 const KEY = 'ares.first-light.tutorial.v1';
+const POS_KEY = 'ares.first-light.tutorial.position';
+/** Interface the card should not cover by default, with how much covering each one costs. */
+const BUSY = [['.map-inspector', 3], ['.map-action-bar', 3], ['.map-resources', 2], ['.topbar', 2], ['.map-minimap-box', 1], ['.map-controls', 1], ['.solar-toggle', 1]];
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const revealed = h => h ? h.tiles.filter(t => t.revealed).length : 0;
@@ -22,7 +25,7 @@ const built = h => h ? h.tiles.filter(t => t.building).length : 0;
 export const STEPS = [
   {chapter: 'Welcome', title: 'Welcome, Commander', center: true,
     body: 'You run a young space programme from <b>Mars HQ</b>. Your goals: explore and build up Mars, fly the first missions to Earth and beyond, keep your crews alive, and satisfy the review board that sets your budget every year.',
-    hint: 'This tutorial takes about ten minutes. Close it any time with ✕; resume or restart it from ⚙ Settings in the top bar.'},
+    hint: 'This card is movable: drag it by its top bar (⠿) to anywhere it is not in the way, and it stays there. ⌖ snaps it back. Close it any time with ✕; resume or restart from ⚙ Settings.'},
   {chapter: 'Welcome', title: 'Time and resources', target: ['.map-resources'],
     body: 'Science pays for research, credits pay for missions, and your budget adds credits every turn. <b>NEXT TURN</b> moves the calendar forward three months: buildings produce, ships travel, hazards strike.',
     hint: 'There are no action points. Give as many orders as you like before ending the turn.'},
@@ -144,6 +147,9 @@ export function settingsView({tutorial, mapMotion, guideHidden}) {
 export function createTutorial(getContext, actions = {}) {
   let progress = loadProgress();
   let base = null, baseStep = -1, scrolledStep = -1, frame = 0, keyboard = false;
+  let userPos = null;
+  try { userPos = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch { /* storage unavailable */ }
+  const savePos = () => { try { userPos ? localStorage.setItem(POS_KEY, JSON.stringify(userPos)) : localStorage.removeItem(POS_KEY); } catch { /* ignore */ } };
   const root = document.createElement('div');
   root.id = 'tutorial-root';
   document.body.append(root);
@@ -178,8 +184,8 @@ export function createTutorial(getContext, actions = {}) {
     const chapters = [...new Set(STEPS.map(s => s.chapter))];
     const missing = !current.center && !el;
     const waiting = current.action && !missing;
-    return `<div class="tut-head"><span class="tut-chapter">CHAPTER ${chapters.indexOf(current.chapter) + 1} · ${esc(current.chapter.toUpperCase())}</span>
-        <button class="tut-close" data-tut="close" aria-label="Close tutorial">✕</button></div>
+    return `<div class="tut-head" data-drag><span class="tut-grip" aria-hidden="true">⠿</span><span class="tut-chapter">CHAPTER ${chapters.indexOf(current.chapter) + 1} · ${esc(current.chapter.toUpperCase())}</span>
+        ${userPos ? '<button class="tut-close" data-tut="snap" aria-label="Move the card back to its automatic position" title="Snap back">⌖</button>' : ''}<button class="tut-close" data-tut="move" aria-label="Move tutorial card with arrow keys" title="Drag the top bar, or focus here and use arrow keys">✥</button><button class="tut-close" data-tut="close" aria-label="Close tutorial">✕</button></div>
       <h2 id="tut-title">${esc(current.title)}</h2>
       <p class="tut-body">${current.body}</p>
       ${current.hint ? `<p class="tut-hint"><span aria-hidden="true">💡</span> ${esc(current.hint)}</p>` : ''}
@@ -195,10 +201,10 @@ export function createTutorial(getContext, actions = {}) {
 
   function offerMarkup() {
     return `<div class="tut-card tut-offer" role="dialog" aria-modal="false" aria-labelledby="tut-title">
-      <div class="tut-head"><span class="tut-chapter">NEW COMMANDER</span><button class="tut-close" data-tut="dismiss" aria-label="Dismiss">✕</button></div>
+      <div class="tut-head" data-drag><span class="tut-grip" aria-hidden="true">⠿</span><span class="tut-chapter">NEW COMMANDER</span><button class="tut-close" data-tut="dismiss" aria-label="Dismiss">✕</button></div>
       <h2 id="tut-title">Learn the ropes?</h2>
       <p class="tut-body">A guided tutorial walks you through exploring Mars, building, keeping crews alive, writing flight software and launching your first mission.</p>
-      <p class="tut-hint"><span aria-hidden="true">💡</span> You can restart it later from ⚙ Settings.</p>
+      <p class="tut-hint"><span aria-hidden="true">💡</span> The tutorial card can be dragged out of your way by its top bar. You can restart it later from ⚙ Settings.</p>
       <div class="tut-foot"><span></span><div class="tut-buttons"><button class="button secondary" data-tut="dismiss">NOT NOW</button><button class="button primary" data-tut="start">START TUTORIAL</button></div></div></div>`;
   }
 
@@ -209,6 +215,7 @@ export function createTutorial(getContext, actions = {}) {
     if (!el) {
       spot.style.display = 'none';
       root.classList.toggle('tut-dim', step()?.center === true || progress.status === 'offer');
+      if (userPos && progress.status === 'active' && !step().center) { pin(card); return; }
       card.style.left = `${Math.max(m, (vw - card.offsetWidth) / 2)}px`;
       card.style.top = `${Math.max(m, (vh - card.offsetHeight) / 2)}px`;
       return;
@@ -216,22 +223,32 @@ export function createTutorial(getContext, actions = {}) {
     root.classList.remove('tut-dim');
     const r = el.getBoundingClientRect(), pad = 6;
     Object.assign(spot.style, {display: 'block', left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`});
-    if (vw < 640) {
-      // Phones: dock to the bottom, or to the top when the target is in the lower half.
-      card.style.left = `${m}px`;
-      card.style.top = `${r.top + r.height / 2 > vh / 2 ? m : vh - card.offsetHeight - m}px`;
-      return;
-    }
+    if (userPos) { pin(card); return; }
     const w = card.offsetWidth, h = card.offsetHeight;
-    const spots = [
-      [r.left + r.width / 2 - w / 2, r.bottom + 16, r.bottom + 16 + h <= vh - m],
-      [r.left + r.width / 2 - w / 2, r.top - 16 - h, r.top - 16 - h >= m],
-      [r.right + 16, r.top + r.height / 2 - h / 2, r.right + 16 + w <= vw - m],
-      [r.left - 16 - w, r.top + r.height / 2 - h / 2, r.left - 16 - w >= m],
-    ];
-    const [x, y] = (spots.find(s => s[2]) || [vw - w - m, vh - h - m]);
-    card.style.left = `${Math.max(m, Math.min(vw - w - m, x))}px`;
-    card.style.top = `${Math.max(m, Math.min(vh - h - m, y))}px`;
+    const clampX = x => Math.max(m, Math.min(vw - w - m, x)), clampY = y => Math.max(m, Math.min(vh - h - m, y));
+    // Candidates: beside the target, then calm areas of the screen. Pick the one that hides the least.
+    const candidates = [
+      [r.left + r.width / 2 - w / 2, r.bottom + 16], [r.left + r.width / 2 - w / 2, r.top - 16 - h],
+      [r.right + 16, r.top + r.height / 2 - h / 2], [r.left - 16 - w, r.top + r.height / 2 - h / 2],
+      [m, vh * .32], [vw * .3, vh * .3], [vw / 2 - w / 2, vh * .18], [m, vh - h - m], [vw - w - m, vh * .3],
+      [m, m], [vw - w - m, vh - h - m], [m, vh / 2 - h / 2],
+    ].map(([x, y]) => [clampX(x), clampY(y)]);
+    const panel = document.querySelector('.game-screen-panel');
+    const busy = (panel ? [['.topbar', 2]] : BUSY).flatMap(([sel, weight]) => [...document.querySelectorAll(sel)].map(node => [node.getBoundingClientRect(), weight]));
+    // On the map, keep the middle (where the base is and where players click) clear.
+    if (!panel && document.querySelector('#planet-map')) busy.push([{left: vw / 2 - 230, right: vw / 2 + 230, top: vh / 2 - 150, bottom: vh / 2 + 190}, 3]);
+    const overlap = (x, y, b) => Math.max(0, Math.min(x + w, b.right) - Math.max(x, b.left)) * Math.max(0, Math.min(y + h, b.bottom) - Math.max(y, b.top));
+    const target = el.matches('#planet-map') ? null : r;
+    const cost = ([x, y]) => (target ? overlap(x, y, target) * 10 : 0) + busy.reduce((sum, [b, weight]) => sum + overlap(x, y, b) * weight, 0);
+    const [x, y] = candidates.reduce((best, c) => cost(c) < cost(best) ? c : best);
+    card.style.left = `${x}px`;
+    card.style.top = `${y}px`;
+  }
+
+  function pin(card) {
+    const vw = window.innerWidth, vh = window.innerHeight, m = 8;
+    card.style.left = `${Math.max(m, Math.min(vw - card.offsetWidth - m, userPos.x))}px`;
+    card.style.top = `${Math.max(m, Math.min(vh - 60, userPos.y))}px`;
   }
 
   function reposition() {
@@ -275,10 +292,41 @@ export function createTutorial(getContext, actions = {}) {
     const what = button.dataset.tut;
     if (what === 'start') go(0);
     else if (what === 'dismiss' || what === 'close') { progress = {...progress, status: what === 'close' ? 'paused' : 'paused'}; save(); sync(); }
+    else if (what === 'snap') { userPos = null; savePos(); sync(); }
+    else if (what === 'move') { /* focus target for arrow-key moves */ }
     else if (what === 'next') go(progress.step + 1);
     else if (what === 'back') go(Math.max(0, progress.step - 1));
     else if (what === 'assist') { if (!actions.suggest?.(step().assist)) { const note = root.querySelector('.tut-status'); if (note) note.textContent = 'No suitable sector is visible right now. Try scanning or zooming out.'; } }
     else if (what === 'goto') document.querySelector(`[data-action="nav"][data-id="${step().goto}"]`)?.click();
+  });
+  root.addEventListener('pointerdown', event => {
+    const head = event.target.closest('[data-drag]');
+    if (!head || event.target.closest('button') || event.button !== 0) return;
+    const card = head.closest('.tut-card'), start = card.getBoundingClientRect();
+    const dx = event.clientX - start.left, dy = event.clientY - start.top;
+    head.setPointerCapture(event.pointerId);
+    card.classList.add('is-dragging');
+    const move = e => { userPos = {x: e.clientX - dx, y: e.clientY - dy}; pin(card); };
+    const end = () => {
+      card.classList.remove('is-dragging');
+      head.removeEventListener('pointermove', move);
+      head.removeEventListener('pointerup', end);
+      head.removeEventListener('pointercancel', end);
+      if (userPos) { savePos(); sync(); }
+    };
+    head.addEventListener('pointermove', move);
+    head.addEventListener('pointerup', end);
+    head.addEventListener('pointercancel', end);
+    event.preventDefault();
+  });
+  root.addEventListener('keydown', event => {
+    if (!event.target.matches('[data-tut="move"]')) return;
+    const delta = {ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24]}[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    const card = root.querySelector('.tut-card'), rect = card.getBoundingClientRect();
+    userPos = {x: rect.left + delta[0], y: rect.top + delta[1]};
+    pin(card); savePos();
   });
   window.addEventListener('resize', reposition);
   document.addEventListener('scroll', reposition, true);
