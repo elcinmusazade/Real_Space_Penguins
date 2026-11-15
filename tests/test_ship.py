@@ -5,6 +5,7 @@ from copy import deepcopy
 
 from ares import campaign, faults, ship
 from ares.campaign_data import PLANET_DANGERS, WORLDS
+from test_campaign import advance
 
 
 def cond(sensor, op, value):
@@ -83,8 +84,7 @@ class PartsAndFitTests(unittest.TestCase):
         s = result["state"]
         mission = s["missions"][-1]
         if mission["status"] == "in_flight":
-            while s["turn"] < mission["arrivesAt"]:
-                s = campaign.execute(s, "advance", {})["state"]
+            s = advance(s, mission["arrivesAt"] - s["turn"])
             mission = s["missions"][-1]
             self.assertIn(mission["outcome"], ("degraded", "lost"))
             self.assertTrue(any(r["phase"] == "fit" for r in mission["report"]))

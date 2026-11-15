@@ -226,6 +226,47 @@ WORLD_INTENSITY = {"earth": (0.8, 1.0)}
 def intensity_range(world: str) -> tuple[float, float]:
     return WORLD_INTENSITY.get(world, SCENARIO_INTENSITY)
 
+# Local incidents interrupt the campaign for a stockpile decision. Costs are paid in full;
+# changes are capped by the stock available or by the storage limit.
+INCIDENTS = {
+    "water_leak": {
+        "title": "Water manifold leak",
+        "description": "A return valve has split. Repair it now to save the water in the damaged line.",
+        "choices": [
+            {"id": "replace", "label": "Install a spare valve", "cost": {"spares": 2}},
+            {"id": "fabricate", "label": "Fabricate a coupling", "cost": {"materials": 8, "energy": 4}},
+            {"id": "endure", "label": "Isolate and drain the line", "changes": {"water": -16}},
+        ],
+    },
+    "cold_store": {
+        "title": "Cold storage failure",
+        "description": "The refrigeration controller has failed. The emergency chiller can keep the food cold until repairs finish.",
+        "choices": [
+            {"id": "replace", "label": "Replace the controller", "cost": {"spares": 2}},
+            {"id": "chill", "label": "Power the emergency chiller", "cost": {"energy": 12}},
+            {"id": "endure", "label": "Write off the affected crates", "changes": {"food": -18}},
+        ],
+    },
+    "oxygen_leak": {
+        "title": "Oxygen regulator icing",
+        "description": "An iced regulator is venting stored oxygen. Warming the housing or replacing the regulator will seal the line.",
+        "choices": [
+            {"id": "thaw", "label": "Thaw the regulator", "cost": {"heat": 8, "energy": 3}},
+            {"id": "replace", "label": "Fit a spare regulator", "cost": {"spares": 2}},
+            {"id": "endure", "label": "Vent the damaged tank", "changes": {"oxygen": -15}},
+        ],
+    },
+    "cargo_pod": {
+        "title": "Supply pod off course",
+        "description": "A supply pod missed the depot. There is time to retrieve one load before its beacon goes dark.",
+        "choices": [
+            {"id": "tow", "label": "Tow the parts pallet", "cost": {"fuel": 7, "energy": 4}, "changes": {"spares": 4}},
+            {"id": "siphon", "label": "Pump out the water tank", "cost": {"energy": 7}, "changes": {"water": 16}},
+            {"id": "endure", "label": "Let the pod go"},
+        ],
+    },
+}
+
 # Surface hazards (game values). chance = per-turn chance a forecast is issued
 # for a hub on that world; growth = severity added per elapsed turn.
 HAZARDS = {
@@ -314,7 +355,7 @@ def campaign_catalog() -> dict:
         "estimatedLightWorlds": sorted(ESTIMATED_LIGHT_MINUTES), "gmatDestinations": list(table()["destinations"]),
         "platformFacilities": {"drill": "Atmospheric Refinery", "extractor": "Cloud Condenser", "command": "Platform Core"},
         "orders": {"sensors": ORDER_SENSORS, "responses": ORDER_RESPONSES, "slots": ORDER_SLOTS, "autonomySlots": ORDER_SLOTS_AUTONOMY, "example": EXAMPLE_ORDERS},
-        "hazards": HAZARDS, "goals": GOALS, "reviewEvery": REVIEW_EVERY,
+        "hazards": HAZARDS, "incidents": INCIDENTS, "stockLimit": MAX_RESOURCE, "goals": GOALS, "reviewEvery": REVIEW_EVERY,
         "repairCost": REPAIR_COST, "prepareCost": PREPARE_COST,
         "notice": "Earth departures to Mars, Venus, Mercury and Europa use NASA GMAT data (DE421 ephemeris, Atlas V 401 curve), solved as Sun-only two-body Lambert transfers. All outer-planet routes and floating platforms are game estimates.",
     })

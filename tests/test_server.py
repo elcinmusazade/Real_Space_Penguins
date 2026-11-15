@@ -192,6 +192,9 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(len(state["missions"]), 1)
         self.assertEqual(state["missions"][0]["status"], "in_flight")
         for _ in range(quote["turns"]):
+            if state["event"]:
+                _, _, raw = self.request("/api/campaign/action", {"state": state, "action": "eventChoice", "args": {"choice": "endure"}})
+                state = json.loads(raw)["state"]
             status, _, raw = self.request("/api/campaign/action", {"state": state, "action": "advance", "args": {}})
             self.assertEqual(status, 200)
             state = json.loads(raw)["state"]
@@ -265,6 +268,9 @@ class ServerTests(unittest.TestCase):
         state = json.loads(raw)["state"]
         self.assertEqual(len(state["hubs"]),1)
         for _ in range(quote["turns"]):
+            if state["event"]:
+                _, _, raw = self.request("/api/campaign/action", {"state": state, "action": "eventChoice", "args": {"choice": "endure"}})
+                state = json.loads(raw)["state"]
             status, _, raw = self.request("/api/campaign/action", {"state":state,"action":"advance","args":{}})
             self.assertEqual(status,200)
             result = json.loads(raw)

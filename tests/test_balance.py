@@ -10,7 +10,7 @@ import unittest
 
 from ares import campaign, ship
 from campaign_fixtures import established_campaign
-from ares.campaign_data import MAP_SIZE
+from ares.campaign_data import INCIDENTS, MAP_SIZE
 
 CORE = MAP_SIZE * (MAP_SIZE // 2) + MAP_SIZE // 2
 TURNS = 24
@@ -67,6 +67,11 @@ def careful(seed):
         (5, plan("venus", "survey", "", ["lab"], "scout", 100, parts={"entry": "none"})),
     ]
     for _ in range(TURNS):
+        if s["event"]:
+            options = INCIDENTS[s["event"]["incident"]]["choices"]
+            stock = next(h["stocks"] for h in s["hubs"] if h["id"] == s["event"]["hub"])
+            choice = next(o for o in options if all(stock[k] >= n for k, n in o.get("cost", {}).items()))
+            s = try_act(s, "eventChoice", choice=choice["id"])
         for forecast in s["forecasts"]:
             if not forecast["prepared"] and forecast["turn"] > s["turn"]:
                 s = try_act(s, "prepare", forecast=forecast["id"])
@@ -95,6 +100,8 @@ def careless(seed):
     s = try_act(s, "launch", design=plan("mars", "surface", "Jezero Rim", ["rover", "lab"], "lander", 1500), confirm=True)
     s = try_act(s, "setOrders", rules=[])
     for _ in range(TURNS):
+        if s["event"]:
+            s = try_act(s, "eventChoice", choice="endure")
         if s["turn"] == 2:
             s = try_act(s, "setSoftware", computer="standard", rules=[])
             s = try_act(s, "launch", design=plan("mars", "orbital", "", ["relay", "lab"], "scout", 600))

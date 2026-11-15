@@ -26,6 +26,8 @@ class StartupTests(unittest.TestCase):
             "vehicle":"atlas_v_401", "propellantKg":600}})["state"]
         for _ in range(3):
             arrival = campaign.execute(arrival, "advance", {})["state"]
+        if arrival["event"]:
+            arrival = campaign.execute(arrival, "eventChoice", {"choice":"endure"})["state"]
         fixture = {"fresh":fresh,"existing":established_campaign("EXISTING"),"earthOnly":earth_campaign("EARTH-ONLY"),"catalog":campaign_catalog(),
                    "arrived":arrival,
                    "platforms":[campaign._hub(f"P{i}",w,"surface",WORLDS[w]["sites"][0],payload=["survey","shield"]) for i,w in enumerate(sorted(ATMOSPHERIC_WORLDS))],

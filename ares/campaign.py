@@ -21,7 +21,7 @@ from . import faults, flight, industry, orders, ship, surface
 from . import research as research_rules
 from .campaign_data import (
     ARRIVAL_SCENARIO, LEGACY_ARRIVAL_SCENARIO, PLANET_DANGERS, BUDGET_MAX, BUDGET_MIN, BUDGET_START, BUILDINGS, DARK_TURNS_TO_LOSE,
-    ENGINES, EXAMPLE_ORDERS, FORECAST_LEAD, GOALS, HAZARDS, HULLS, LAUNCH_VEHICLES, MAX_RESOURCE,
+    ENGINES, EXAMPLE_ORDERS, FORECAST_LEAD, GOALS, HAZARDS, INCIDENTS, HULLS, LAUNCH_VEHICLES, MAX_RESOURCE,
     ATMOSPHERIC_WORLDS, COLONY_PLANETS, PAYLOADS, PREPARE_COST, REPAIR_COST, RESEARCH, RESOURCE_KEYS, REVIEW_EVERY, ROUTES,
     SCENARIO_INTENSITY, TRAJECTORIES, intensity_range, WEAR, WORLDS, MAP_SIZE,
 )
@@ -320,8 +320,17 @@ def validate(state: Any) -> dict:
     if research is not None and (not isinstance(research, dict) or research.get("id") not in RESEARCH or type(research.get("completesAt")) is not int):
         return {"ok": False, "error": "Invalid active research."}
     event = state.get("event")
-    if event is not None and (not isinstance(event, dict) or event.get("hub") not in hub_ids or not isinstance(event.get("title"), str) or not isinstance(event.get("description"), str) or not isinstance(event.get("choices"), list)):
-        return {"ok": False, "error": "Invalid event state."}
+    if event is not None:
+        if not isinstance(event, dict) or not isinstance(event.get("hub"), str) or event["hub"] not in hub_ids:
+            return {"ok": False, "error": "Invalid event hub."}
+        if "incident" in event:
+            if not isinstance(event["incident"], str) or event["incident"] not in INCIDENTS:
+                return {"ok": False, "error": "Invalid local incident."}
+            site = _hub_by_id(state, event["hub"])
+            if not _has_surface(site) or not _active(site):
+                return {"ok": False, "error": "Local incidents require an operating base."}
+        elif not isinstance(event.get("title"), str) or not isinstance(event.get("description"), str) or not isinstance(event.get("choices"), list):
+            return {"ok": False, "error": "Invalid event state."}
     if any(not isinstance(item, dict) or type(item.get("turn")) is not int or not isinstance(item.get("message"), str) for item in state["log"]):
         return {"ok": False, "error": "Invalid mission log."}
     error = _validate_v3(state, hub_ids)
@@ -1324,9 +1333,50 @@ def _review(state: dict) -> None:
     _log(state, f"PROGRAMME REVIEW: score {score}. Budget {verdict}: {old} -> {state['budget']} credits per turn.", "success" if state["budget"] >= old else "warning")
 
 
-def _choose_event(state: dict, choice: str) -> dict:
-    """Resolve an environmental event carried over from a Campaign V2 save."""
+def _issue_incident(state: dict) -> None:
+    # Turns 4, 7, 11, 14, ...; each four-incident cycle includes every scenario once.
+    turn = state["turn"]
+    if turn % 7 not in (0, 4):
+        return
+    sites = [hub for hub in state["hubs"] if _has_surface(hub) and _active(hub)]
+    if not sites:
+        return
+    index = (turn * 2 // 7) - 1
+    cycle, slot = divmod(index, len(INCIDENTS))
+    order = sorted(INCIDENTS, key=lambda kind: _roll(state["seed"], cycle, kind, "incident order"))
+    kind = order[slot]
+    hub = sites[int(_roll(state["seed"], turn, "incident hub") * len(sites))]
+    state["event"] = {"incident": kind, "hub": hub["id"]}
+    _log(state, f"{hub['name']}: {INCIDENTS[kind]['title']}. A supply decision is needed.", "warning")
+
+
+def _resolve_incident(state: dict, choice: str) -> dict:
     event = state["event"]
+    incident = INCIDENTS[event["incident"]]
+    hub = _hub_by_id(state, event["hub"])
+    stock = hub["stocks"]
+    option = next((item for item in incident["choices"] if item["id"] == choice), None)
+    if option is None:
+        return _fail(state, "Choose one of the responses to this incident.")
+    cost = option.get("cost", {})
+    for resource, needed in cost.items():
+        if stock[resource] < needed:
+            return _fail(state, f"{hub['name']} needs {needed} {resource} for this response and has {stock[resource]}.")
+    before = stock.copy()
+    for resource, needed in cost.items():
+        stock[resource] -= needed
+    for resource, delta in option.get("changes", {}).items():
+        stock[resource] = min(MAX_RESOURCE, max(0, stock[resource] + delta))
+    receipt = ", ".join(f"{stock[k] - n:+d} {k}" for k, n in before.items() if stock[k] != n)
+    state["event"] = None
+    return _success(state, f"{hub['name']} · {incident['title']}: {option['label']}. {receipt or 'Stockpile unchanged'}.")
+
+
+def _choose_event(state: dict, choice: str) -> dict:
+    event = state["event"]
+    if event and "incident" in event:
+        return _resolve_incident(state, choice)
+    # Older V2 saves can contain a pending prepare/endure environmental event.
     if not event or choice not in ("prepare", "endure"):
         return _fail(state, "There is no matching mission event to resolve.")
     hub = _hub_by_id(state, event["hub"])
@@ -1389,6 +1439,7 @@ def _advance(state: dict) -> dict:
     if (state["turn"] - 1) % REVIEW_EVERY == 0:
         _review(state)
     _issue_forecasts(state)
+    _issue_incident(state)
     previously_colonized = state["colonizedPlanets"]
     state["colonizedPlanets"] = _colonized_planets(state["hubs"])
     if state["colonizedPlanets"] != previously_colonized and len(state["colonizedPlanets"]) == len(COLONY_PLANETS):

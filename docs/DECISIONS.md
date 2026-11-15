@@ -211,3 +211,7 @@ The player requested JARVIS through Gemini’s free tier. The game host calls Ge
 ## D-028 — Colonize all eight planets
 
 The opening sets the campaign objective. Establishing a base or a cloud platform counts once per planet. Mars HQ counts from the start. Europa is optional. An established site remains part of the programme’s colonization history even if it goes dark. Progress is reconstructed from saved hubs, so existing campaigns receive credit. The eighth planet triggers victory once and players can keep playing.
+
+## D-029 — Local stockpile decisions
+
+Bring back a player decision at turn 4 and at alternating three- and four-turn intervals. Give each active base, including headquarters, a chance to receive it. A seeded shuffle offers all four incidents once per cycle. Costs come from the affected base, so keeping spare parts or enough energy can protect food, oxygen and water. Each incident has an option with no upfront cost. Storm forecasts and standing orders continue on their own schedule.

@@ -361,17 +361,46 @@ function assistantMessage() {
     logistics:'Select two hubs in Logistics and dispatch a shipment. It consumes fuel and credits, travels for turns, and establishes a supply corridor when delivered.',
     survival:'Crewed outposts consume food, water, oxygen, heat and power each turn. Supply shortages lower crew health. Solar arrays, extractors, heaters and greenhouses help balance production.',
   };
-  if(state.event)return `Warning: ${state.event.title}. Resolve the event before advancing. Defensive preparation costs local materials; enduring can damage reserves.`;
+  if(state.event)return `Decision needed at ${hub(state.event.hub).name}. Choose a response before advancing the turn.`;
   if(assistantTopic==='welcome'&&activeFlights().length)return `${activeFlights().length} spacecraft in flight. Open the mission timeline to track their estimated arrival, or advance a turn to progress travel and production.`;
   return topics[assistantTopic]||topics.welcome;
 }
 
 function advisor(){return `<aside class="advisor-panel"><div class="advisor-head"><span class="aura-avatar">✺</span><div><b>A.U.R.A.</b><small>MISSION CONTROL ADVISOR</small></div>${pill('GUIDANCE','green')}</div><div class="advisor-body"><div class="aura-message">${esc(assistantMessage())}</div><p class="aura-caption">Ask AURA about:</p><div class="aura-topics">${[['ships','Ship design'],['exploration','Exploration'],['logistics','Cargo routes'],['survival','Survival']].map(([key,label])=>`<button data-action="advisor-topic" data-id="${key}" class="${assistantTopic===key?'selected':''}">${label}</button>`).join('')}</div><div class="advisor-notice">ⓘ AURA uses authored, state-aware guidance. Open JARVIS for campaign chat.</div></div><button class="advisor-manual" data-action="assistant">OPEN INTRODUCTION ↗</button></aside>`;}
 
+function eventView(){
+  const event = state.event;
+  const site = hub(event.hub);
+  const incident = event.incident ? catalog.incidents[event.incident] : event;
+  const legacyChoices = [
+    {id:'prepare', label:'Prepare defenses', cost:{materials:8}},
+    {id:'endure', label:'Endure the hazard', description:'Keep materials. Energy, heat and crew health may fall.'},
+  ];
+  const options = incident.choices.length ? incident.choices : legacyChoices;
+  const choices = options.map(option => {
+    const cost = Object.entries(option.cost || {});
+    const unavailable = cost.some(([key, amount]) => site.stocks[key] < amount);
+    const details = cost.map(([key, amount]) => {
+      const held = site.stocks[key];
+      return `Spend ${amount} ${resourceName[key].toLowerCase()} · ${held} here${held < amount ? ` (short ${amount - held})` : ''}`;
+    });
+    for(const [key, delta] of Object.entries(option.changes || {})){
+      const held = site.stocks[key];
+      const after = Math.min(catalog.stockLimit, Math.max(0, held + delta));
+      details.push(`${resourceName[key]} ${held} → ${after} (${delta < 0 ? 'lose' : 'recover'} ${Math.abs(after - held)})`);
+    }
+    return `<button class="event-option" data-action="event-choice" data-id="${esc(option.id)}" ${pending || unavailable ? 'disabled' : ''}>
+      <b>${esc(option.label)}</b><span>${esc(option.description || details.join(' · ') || 'Keep all local supplies.')}</span></button>`;
+  }).join('');
+  return `<div class="modal-scrim"><section class="aura-modal event-modal" role="dialog" aria-modal="true" aria-labelledby="event-title">
+    <div class="eyebrow">${esc(site.name)} · TURN ${fmtTurn(state.turn)}</div><h2 id="event-title">${esc(incident.title)}</h2>
+    <p>${esc(incident.description)}</p><div class="event-options">${choices}</div></section></div>`;
+}
+
 function modalMarkup(){
   if(!modal)return '';
   if(modal==='intro')return `<div class="modal-scrim"><section class="aura-modal" role="dialog" aria-modal="true" aria-labelledby="aura-title"><div class="modal-aura">✺</div><div class="eyebrow">A.U.R.A. · INCOMING BRIEFING</div><h2 id="aura-title">Welcome to<br><em>interplanetary command.</em></h2><p>Commander, it is ${turnDate(state.turn)}. Each turn is three months. Earth launch windows follow the planets; Mars departures use game-estimate transfers. Missions can fail, storms can kill a crew, and a review board decides your budget every year.</p><div class="intro-steps"><div><span>01</span><b>WRITE RULES</b><small>Flight software and base orders react when Mission Control is too far away.</small></div><div><span>02</span><b>FLY THE WINDOWS</b><small>Check every flight plan; supported Earth routes use GMAT-derived data.</small></div><div><span>03</span><b>KEEP THEM ALIVE</b><small>Supply, repair and prepare bases before hazards strike.</small></div></div><div class="modal-buttons"><button class="button secondary" data-action="intro-skip">EXPLORE FREELY</button><button class="button primary" data-action="intro-plan">DESIGN FIRST MISSION ↗</button></div><div class="modal-disclaimer">Earth departures to Mars, Venus, Mercury and Europa use NASA GMAT's bundled DE421 ephemeris and Atlas V 401 data, solved as Sun-only two-body transfers. Outer-planet routes and other values are labelled game estimates.</div></section></div>`;
-  if(modal==='event'&&state.event)return `<div class="modal-scrim"><section class="aura-modal event-modal" role="dialog" aria-modal="true" aria-labelledby="event-title"><div class="modal-aura danger">!</div><div class="eyebrow">ENVIRONMENTAL EVENT · TURN ${fmtTurn(state.turn)}</div><h2 id="event-title">${esc(state.event.title)}</h2><p>${esc(state.event.description)}</p><div class="event-options">${state.event.choices.map(c=>`<button class="event-option" data-action="event-choice" data-id="${esc(c.id)}"><b>${esc(c.label)} →</b><span>${esc(c.description)}</span></button>`).join('')}</div></section></div>`;
+  if(modal==='event'&&state.event)return eventView();
   if(modal==='confirm-launch'&&quote?.ok){const failed=quote.checks.filter(c=>!c.ok);return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><div class="modal-aura danger">!</div><div class="eyebrow">LAUNCH CHECK FAILED</div><h2 id="confirm-title">This mission ${esc((outcomeText[quote.outcome]||'').toLowerCase())}.</h2><ul class="check-list">${failed.map(c=>`<li class="bad"><b>✕ ${esc(c.label)}</b><span>${esc(c.detail)}</span></li>`).join('')}</ul><p>Launching anyway spends the credits${quote.outcome==='scrub'?'; the spacecraft is returned.':quote.outcome==='stranded'?', the spacecraft and its propellant.':' and the spacecraft will not achieve its objective.'}</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">FIX THE PLAN</button><button class="button primary risky" data-action="confirm-launch">LAUNCH ANYWAY</button></div></section></div>`;}
   if(modal==='advisor')return advisorView({advice:adviceState===state?advice:null,topic:adviceTopic});
   if(modal==='credits')return creditsView();
@@ -481,6 +510,11 @@ function render(){
     if(techFocus)[...document.querySelectorAll('.rd-screen [data-action]')].find(el=>el.dataset.action===techFocus.action&&el.dataset.id===techFocus.id)?.focus({preventScroll:true});
     refreshResearch();
   }
+  if(modal==='event'){
+    const options = [...document.querySelectorAll('.event-option:not(:disabled)')];
+    const restore = options.find(button => button.dataset.id === focused?.dataset?.id);
+    (restore || options[0])?.focus({preventScroll:true});
+  }
   tutorial?.sync();
   jarvis?.sync(state.turn, Boolean(modal||solarOpen));
   refreshAdvice();
@@ -533,6 +567,7 @@ async function perform(action,args={}){
     if(action==='advance'){for(const m of state.missions.filter(m=>m.arrivesAt===state.turn&&m.departed<oldTurn+1&&(m.status==='complete'||m.status==='failed')&&m.outcome&&!['scrubbed','stranded'].includes(m.outcome))){render();await playArrival({mission:m,catalog,tracks:catalog.orbitTracks});}}
     if(state.hubs.length>oldCount&&tab==='planner'){selectedHub=state.hubs.at(-1).id;selectedWorld=state.hubs.at(-1).world;}
     if(state.event)modal='event';
+    else if(action==='eventChoice')modal=null;
     render();
     refreshQuote();
   }catch(error){notify(error.message,true);}finally{pending=false;render();}
@@ -666,7 +701,7 @@ app.addEventListener('click',async event=>{
   if(action==='tech-labs'){const home=homeHub();openWorldMap(home.world,home.id);selectedBuilding='laboratory';render();return;}
   if(action==='research'){await perform('research',{tech:id});return;}
   if(action==='advance'){await perform('advance');return;}
-  if(action==='event-choice'){modal=null;await perform('eventChoice',{choice:id});if(state.event)modal='event';render();return;}
+  if(action==='event-choice'){await perform('eventChoice',{choice:id});if(!state.event)document.querySelector('[data-action="advance"]')?.focus();return;}
   if(action==='assistant'){modal='advisor';render();document.querySelector('.advisor-modal [data-action="dismiss-modal"]')?.focus();return;}
   if(action==='advisor-topic'){adviceTopic=id;render();return;}
   if(action==='advisor-dismiss'){if(event.target===button){modal=null;render();}return;}

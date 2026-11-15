@@ -4,6 +4,8 @@
 
 ## Built
 
+- **Local supply decisions.** Turn 4 starts a recurring choice at an operating base. The player can protect reserves, absorb a loss or recover cargo using local stock. [Change log](changes/2026-11-15-local-supply-decisions.md)
+
 - **Campaign opening and credits.** The welcome briefing and Programme show progress toward colonizing all eight planets. Settings → Game credits lists the team, soundtrack and licenses, mission data, educational sources and tools. [Change log](changes/2026-11-15-colonization-objective-and-credits.md)
 
 - **JARVIS on the first visit.** New players see a mint “Open chat” button on the map. It returns to its usual appearance after opening JARVIS or revisiting the campaign. [Change log](changes/2026-11-15-jarvis-first-visit.md)
@@ -50,6 +52,8 @@
 - **Outer-planet maps (2026-11-15):** Jupiter, Saturn, Uranus and Neptune now have distinct animated 96×96 cloud maps, three deployment zones each, surveys/construction, local production, hazards and delayed supplies. Preview immediately; deploy only after Deep-Space Engineering research and an arriving shielded survey platform. No free hubs or save reset. New routes, capture/launch allowances and marked light-times are game estimates; the existing four-destination GMAT table is unchanged.
 
 ## Observed checks
+
+- Local supply decisions, 2026-11-15: 180 tests passed, including the 24-turn balance scenarios and four incident tests. One optional GMAT recomputation was skipped because the local source clone was absent. Browser checks covered a pending incident after reload, salvaging four parts, and spending two on the next repair.
 
 - Campaign objective and credits, 2026-11-15: 176 tests passed. One optional GMAT recomputation was skipped because the source clone was absent. Browser verification covered the opening, Programme, all nine recordings, source links and returning to Settings.
 
