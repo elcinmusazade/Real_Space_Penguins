@@ -184,3 +184,10 @@ Use spotlight coach marks over the real interface rather than a separate sandbox
 **Status:** Implemented on `feature/tutorial`. **Date:** 2026-11-15. **Reason:** The ✺ button only reopened a fixed briefing, while the tutorial promised advice.
 
 Compute advice in Python so it uses the authoritative rules instead of re-implementing them in the browser: project supplies by running one turn on a deep copy, lab-test the saved flight software, read the GMAT window table. Advice is read-only and offline (no LLM). Each item carries a typed action the UI maps onto existing navigation or the existing `prepare` command, so advice never introduces a new state change.
+
+
+## D-023 — Ships built for planets; rules and dangers per planet
+
+**Status:** Implemented on `feature/shipyard-rework`. **Date:** 2026-11-15. **Reason:** User asked for more ship properties, a ship that changes visibly, a check of how a design suits each planet, and flight software tied to planets.
+
+User decisions: all six part slots; the fit check only warns (a poor fit makes the mission arrive damaged) and shows text status with no colour-change effect; one rule set per planet in tabs (untouched planets use a Default tab); one set of dangers per planet — extended to **two dangers per planet** so players must prepare for both; the lab test flies the player's Shipyard design; Software extras are a run chart and failure hints, **no starter templates**. Environment figures are rounded NASA fact-sheet values; part ratings, danger curves and targets are game values tuned so the right rule beats no rules. Designs without parts (old saves) keep their original single danger so existing campaigns and tests are unchanged.

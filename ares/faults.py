@@ -338,13 +338,17 @@ def simulate(design: dict, scenario_id: str, intensity: float = 1.0, ship: dict 
         "health": {key: round(value) for key, value in health.items() if key in fitted},
         "passed": passed, "fireCounts": fire_counts, "timeline": timeline,
     }
-    result["hint"] = None if passed else _hint(result, damage, rules)
+    peak_supply = solar_full * max(scenario.get("solarFactor", [1])) + craft["steady"]
+    weak_power = peak_supply < sc["busLoad"] + computer["power"] + 4
+    result["hint"] = None if passed else _hint(result, damage, rules, weak_power)
     return result
 
 
-def _hint(result: dict, damage: dict, rules: list[dict]) -> str:
-    """One sentence on what went wrong and which kind of rule would help."""
+def _hint(result: dict, damage: dict, rules: list[dict], weak_power: bool = False) -> str:
+    """One sentence on what went wrong and which kind of rule (or ship part) would help."""
     first = lambda text: next((row["turn"] for row in result["timeline"] for e in row["events"] if text in e), None)
+    if result["brownouts"] and weak_power:
+        return "This ship cannot make enough power here, so no rule can save it. In the Shipyard, fit a nuclear battery (RTG) or bigger solar panels."
     if result["brownouts"]:
         return f"The battery ran flat on turn {first('Brownout')}. A rule like WHEN Battery charge below 30 THEN Enter safe mode saves power."
     worst = max(damage, key=damage.get)
@@ -353,8 +357,8 @@ def _hint(result: dict, damage: dict, rules: list[dict]) -> str:
             "radiation": "WHEN Radiation level above 60 THEN Enter safe mode",
             "heat": "WHEN Outside temperature above (your ship's limit) THEN Thermal protection mode",
             "cold": "WHEN Outside temperature below (your ship's limit) THEN Heaters on",
-            "impacts": "WHEN Particle impacts above 50 THEN Shield attitude",
-            "wind": "WHEN Wind speed above 60 THEN Descend to calmer layer",
+            "impacts": "WHEN Particle impacts above 40 THEN Shield attitude",
+            "wind": "WHEN Wind speed above 55 THEN Descend to calmer layer",
         }[worst]
         label = {"radiation": "Radiation", "heat": "Overheating", "cold": "Frozen", "impacts": "Particle impacts", "wind": "Wind buffeting"}[worst]
         return f"{label} damaged the instruments from turn {first(label)}. Try {advice}."

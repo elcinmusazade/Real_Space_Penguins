@@ -111,3 +111,35 @@
 
 /* Seven nav destinations: drop labels to icons before they scroll out of view. */
 @media (max-width:1180px){.map-mode .nav-item{font-size:0;padding:0 10px;gap:0}.map-mode .nav-item span{font-size:17px}}
+
+/* Software screen: planet tabs, dangers, lab results with run chart */
+.planet-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin:6px 0 14px}
+.planet-tab{flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);min-width:92px}
+.planet-tab b{font-size:13px}
+.planet-tab small{font-size:9.5px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;font-weight:700}
+.planet-tab.active{border-color:var(--aqua);box-shadow:inset 0 0 0 1px var(--aqua)}
+.danger-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:4px 0 12px}
+.danger-card{border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:10px;padding:9px 11px;background:#0d1a26;min-width:0}
+.danger-card small{display:block;font-size:9px;letter-spacing:1.4px;font-weight:800;color:var(--amber)}
+.danger-card b{display:block;font-size:13px;margin:2px 0}
+.danger-card p{font-size:11.5px;line-height:1.5;color:var(--muted);margin:0}
+.danger-result{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#0d1a26}
+.danger-result+.danger-result{margin-top:8px}
+.dr-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.dr-head b{font-size:13px}
+.dr-head span{font-size:10px;letter-spacing:1.2px;font-weight:800;color:var(--muted)}
+.danger-result.pass .dr-head span{color:var(--good)}.danger-result.fail .dr-head span{color:var(--danger)}
+.danger-result>small{display:block;color:var(--muted);font-size:11px;margin:2px 0 6px}
+.dr-hint{font-size:12px;line-height:1.5;margin:8px 0 0;padding:7px 9px;border-radius:8px;background:#e9ab7b14;border:1px solid #e9ab7b33}
+.run-chart{width:100%;height:auto;display:block}
+.rc-grid{stroke:var(--line);stroke-width:.6}
+.rc-axis{fill:var(--muted);font-size:8px;font-family:ui-monospace,monospace}
+.rc-battery{fill:none;stroke:var(--aqua);stroke-width:2}
+.rc-hazard{fill:none;stroke:var(--amber);stroke-width:1.6;stroke-dasharray:4 3}
+.rc-fire{fill:var(--good)}
+.rc-lost{fill:var(--danger);font-size:9px;font-weight:700}
+.rc-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:var(--muted);margin-top:2px}
+.rc-legend .k-battery::before{content:"";display:inline-block;width:14px;height:2px;background:var(--aqua);vertical-align:middle;margin-right:5px}
+.rc-legend .k-hazard::before{content:"";display:inline-block;width:14px;height:0;border-top:2px dashed var(--amber);vertical-align:middle;margin-right:5px}
+.rc-legend .k-fire{color:var(--good)}
+@media (max-width:760px){.danger-cards{grid-template-columns:1fr}}

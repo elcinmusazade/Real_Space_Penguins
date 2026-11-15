@@ -17,28 +17,63 @@ export function ordersConfig(catalog, state) {
     maxConditions: 2, hasFor: false, slots: o.slots + (state.tech.includes('autonomy') ? o.autonomySlots : 0)};
 }
 
-function scenarioRows(catalog, test) {
-  const destinationFor = Object.fromEntries(Object.entries(catalog.faults.arrivalScenario).map(([world, scenario]) => [scenario, world]));
-  return test.results.map(r => `<div class="test-row ${r.passed ? 'pass' : 'fail'}"><span class="test-mark">${r.passed ? '✓' : r.lost ? '✕' : '!'}</span>
-    <div><b>${esc(r.name)} <small>· ARRIVING AT ${esc(worldName(catalog, destinationFor[r.scenario]).toUpperCase())}</small></b>
-    <small>${r.lost ? 'Spacecraft LOST after repeated brownouts' : `${r.science} / ${r.target} science`}${r.instrumentTarget ? ` · camera ${r.byInstrument.camera} / ${r.instrumentTarget.science}` : ''} · ${r.brownouts} brownouts · baseline without rules: ${r.baseline.lost ? 'lost' : r.baseline.science}</small></div>
-    ${pill(r.passed ? 'PASS' : r.lost ? 'LOST' : 'DEGRADED', r.passed ? 'green' : 'orange')}</div>`).join('');
+const WORLD_ORDER = ['mercury', 'venus', 'earth', 'mars', 'europa', 'jupiter', 'saturn', 'uranus', 'neptune'];
+
+/** 12-turn chart of battery and danger level, with a mark wherever a rule fired. */
+function runChart(result) {
+  const W = 300, H = 92, L = 22, T = 8, B = 18, R = 6, n = 12;
+  const x = t => L + (t - 1) * (W - L - R) / (n - 1), y = v => T + (100 - v) * (H - T - B) / 100;
+  const line = key => result.timeline.map((row, i) => `${i ? 'L' : 'M'}${x(row.turn).toFixed(1)},${y(row[key]).toFixed(1)}`).join('');
+  const marks = result.timeline.filter(row => row.fired.some(f => f.status === 'applied')).map(row => `<path class="rc-fire" d="M${x(row.turn).toFixed(1)},${(H - B + 2)} l-3.5,6 h7z"><title>Turn ${row.turn}: rule ${row.fired.filter(f => f.status === 'applied').map(f => f.rule + 1).join(', ')} fired</title></path>`).join('');
+  const lostAt = result.lost ? `<text class="rc-lost" x="${x(result.timeline.at(-1).turn) + 3}" y="${T + 10}">lost</text>` : '';
+  return `<svg class="run-chart" viewBox="0 0 ${W} ${H + 8}" role="img" aria-label="Battery and danger level over the 12-step test">
+    ${[0, 50, 100].map(v => `<line class="rc-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="rc-axis" x="${L - 4}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join('')}
+    ${[1, 4, 8, 12].map(t => `<text class="rc-axis" x="${x(t)}" y="${H - 6}" text-anchor="middle">${t}</text>`).join('')}
+    <path class="rc-hazard" d="${line('hazard')}"/><path class="rc-battery" d="${line('battery')}"/>${marks}${lostAt}</svg>
+    <div class="rc-legend"><span class="k-battery">Battery %</span><span class="k-hazard">Danger level</span><span class="k-fire">▲ a rule fired</span></div>`;
 }
 
-export function softwareView({catalog, state, softwareDraft, ordersDraft, softwareTest, dirtySoftware, dirtyOrders}) {
+function dangerResult(r) {
+  const verdict = r.passed ? (r.harsh ? 'PASS' : 'PASS, BUT NOT IF 25% HARSHER') : r.lost ? 'SHIP LOST' : 'ARRIVES DAMAGED';
+  return `<article class="danger-result ${r.passed ? 'pass' : 'fail'}"><div class="dr-head"><b>${esc(r.name)}</b><span>${verdict}</span></div>
+    <small>${r.lost ? 'Lost after repeated brownouts' : `${r.science} of ${r.target} science`} · ${r.brownouts} brownouts · without any rules: ${r.baseline.lost ? 'lost' : `${r.baseline.science} science`}</small>
+    ${runChart(r)}${r.hint ? `<p class="dr-hint"><b>What went wrong:</b> ${esc(r.hint)}</p>` : ''}</article>`;
+}
+
+function labResults(catalog, test, softwareTab) {
+  if (!test) return '';
+  if (!test.ok) return `<div class="test-results"><div class="quote-warning">${esc(test.error)}</div></div>`;
+  if (test.summary) {
+    return `<div class="test-results"><div class="eyebrow">DEFAULT RULES ON EVERY PLANET THAT USES THEM · ${test.summary.filter(s => s.passed).length} / ${test.summary.length} PASS</div>
+      ${test.summary.map(s => `<div class="test-row ${s.passed ? 'pass' : 'fail'}"><span class="test-mark">${s.passed ? '✓' : '✕'}</span><div><b>${esc(worldName(catalog, s.world))}</b><small>${s.results.map(r => `${esc(r.name)}: ${r.passed ? 'pass' : r.lost ? 'lost' : 'damaged'}`).join(' · ')}</small></div><button class="button secondary" data-action="software-tab" data-id="${esc(s.world)}">OPEN TAB</button></div>`).join('')}</div>`;
+  }
+  return `<div class="test-results"><div class="eyebrow">LAB TEST · ${esc(worldName(catalog, softwareTab).toUpperCase())} · ${test.passed} / ${test.results.length} DANGERS SURVIVED</div>${test.results.map(dangerResult).join('')}</div>`;
+}
+
+export function softwareView({catalog, state, softwareTab, softwareDraft, ordersDraft, softwareTest, dirtySoftware, dirtyOrders, shipLabel}) {
   const sw = softwareConfig(catalog);
   const computers = catalog.computers;
   sw.slots = computers[softwareDraft.computer].slots;
   const od = ordersConfig(catalog, state);
-  return `${ribbon('AUTONOMY', 'FLIGHT SOFTWARE / STANDING ORDERS')}
-  <div class="page-heading"><div><h1>Write the rules before you need them.</h1><p>Signals take 3 to 22 minutes to reach Mars and up to 54 minutes to reach Jupiter. When something goes wrong in flight or on a base, only the rules you wrote react in time.</p></div>${pill('PLAYER-DESIGNED', 'green')}</div>
+  const profiles = state.softwareProfiles || {};
+  const planet = softwareTab !== 'default', own = planet && Boolean(profiles[softwareTab]);
+  const dangers = planet ? catalog.faults.planetDangers[softwareTab].map(id => catalog.faults.scenarios[id]) : [];
+  const tabs = `<div class="planet-tabs" role="tablist" aria-label="Flight rules for each planet">
+    <button role="tab" aria-selected="${!planet}" class="planet-tab ${!planet ? 'active' : ''}" data-action="software-tab" data-id="default"><b>Default</b><small>${WORLD_ORDER.filter(w => !profiles[w]).length} planets</small></button>
+    ${WORLD_ORDER.map(w => `<button role="tab" aria-selected="${softwareTab === w}" class="planet-tab ${softwareTab === w ? 'active' : ''}" data-action="software-tab" data-id="${w}"><b>${esc(worldName(catalog, w))}</b><small>${profiles[w] ? 'own rules' : 'default'}</small></button>`).join('')}</div>`;
+  return `${ribbon('AUTONOMY', 'FLIGHT RULES PER PLANET / STANDING ORDERS')}
+  <div class="page-heading"><div><h1>Prepare for each planet.</h1><p>Every planet has two dangers of its own. A ship carries the rules of the planet it is flying to, and meets one of that planet's dangers on arrival, so give each destination rules that survive both.</p></div>${pill('PLAYER-DESIGNED', 'green')}</div>
+  ${tabs}
   <div class="dual-panels software-columns">
-    <section class="surface-card"><div class="subheading"><h2>Spacecraft flight software</h2><span>LOADED ON EVERY NEW LAUNCH</span></div>
-      <p class="field-description">Each destination has its own approach hazard (${Object.entries(catalog.faults.arrivalScenario).map(([w, s]) => `${worldName(catalog, w)}: ${catalog.faults.scenarios[s].name.toLowerCase()}`).join('; ')}). Real conditions vary from 85% to 125% of the lab test, so leave margin.</p>
+    <section class="surface-card"><div class="subheading"><h2>${planet ? `${esc(worldName(catalog, softwareTab))} flight rules` : 'Default flight rules'}</h2><span>${planet ? (own ? 'THIS PLANET’S OWN RULES' : 'USING THE DEFAULT RULES') : 'FOR PLANETS WITHOUT THEIR OWN'}</span></div>
+      ${planet ? `<div class="danger-cards">${dangers.map((d, i) => `<div class="danger-card"><small>DANGER ${i + 1} OF 2</small><b>${esc(d.name)}</b><p>${esc(d.description)}</p></div>`).join('')}</div>
+        ${own ? '' : `<p class="callout">${esc(worldName(catalog, softwareTab))} uses the default rules. Change anything below and save to give ${esc(worldName(catalog, softwareTab))} rules of its own.</p>`}`
+        : `<p class="field-description">Planets without their own rules use this list. Give a planet its own rules from its tab.</p>`}
       <div class="computer-picker">${Object.entries(computers).map(([id, c]) => `<button class="computer-card ${softwareDraft.computer === id ? 'selected' : ''}" data-action="pick-computer" data-id="${id}" aria-pressed="${softwareDraft.computer === id}"><b>${esc(c.name)}</b><small>${c.slots} rules · ${c.mass * 10} kg · ${c.cost} CR</small></button>`).join('')}</div>
       ${ruleEditor(softwareDraft.rules, sw)}
-      <div class="planner-actions"><button class="button secondary" data-action="software-test">RUN LAB TEST</button><button class="button primary" data-action="software-save" ${dirtySoftware ? '' : 'disabled'}>${dirtySoftware ? 'SAVE FLIGHT SOFTWARE' : 'SAVED'}</button></div>
-      ${softwareTest ? `<div class="test-results">${softwareTest.ok ? `<div class="eyebrow">LAB TEST · ${softwareTest.passed} / ${softwareTest.results.length} SCENARIOS PASSED AT NOMINAL INTENSITY</div>${scenarioRows(catalog, softwareTest)}` : `<div class="quote-warning">${esc(softwareTest.error)}</div>`}</div>` : ''}
+      <p class="field-description">Lab test ship: <b>${esc(shipLabel)}</b> (your current Shipyard design). Real conditions vary from 85% to 125% of the test.</p>
+      <div class="planner-actions">${own ? '<button class="button secondary" data-action="software-clear">USE DEFAULT RULES INSTEAD</button>' : ''}<button class="button secondary" data-action="software-test">RUN LAB TEST</button><button class="button primary" data-action="software-save" ${dirtySoftware ? '' : 'disabled'}>${dirtySoftware ? (planet ? `SAVE ${esc(worldName(catalog, softwareTab).toUpperCase())} RULES` : 'SAVE DEFAULT RULES') : 'SAVED'}</button></div>
+      ${labResults(catalog, softwareTest, softwareTab)}
     </section>
     <section class="surface-card"><div class="subheading"><h2>Base standing orders</h2><span>CHECKED EVERY TURN AT EVERY BASE</span></div>
       <p class="field-description">Hazards are forecast 2 turns ahead. You can order a base to prepare up to one turn before it strikes; after that, only standing orders act. Orders run top to bottom, and each response fires once per turn.</p>
@@ -47,6 +82,7 @@ export function softwareView({catalog, state, softwareDraft, ordersDraft, softwa
       <div class="mission-advice"><span>✺ AURA'S NOTE</span><p>Sheltering protects crew and electronics but stops labs and drills. Stowing arrays protects them from dust but cuts power to 30%. Good orders trade a little output for survival.</p></div>
     </section>
   </div>`;
+
 }
 
 function goalRows(catalog, state) {
