@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from . import __version__
 from . import advice, engine, campaign, faults, research, ship
 from .campaign_data import ARRIVAL_SCENARIO, PAYLOADS, PLANET_DANGERS
-from .campaign_data import campaign_catalog
+from .campaign_data import WORLDS, campaign_catalog
 
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -31,6 +31,9 @@ STATIC_TYPES = {
     "campaign.js": "text/javascript; charset=utf-8",
     "campaign.css": "text/css; charset=utf-8",
     "map-game.css": "text/css; charset=utf-8",
+    "music/credits.txt": "text/plain; charset=utf-8",
+    "planet-music.js": "text/javascript; charset=utf-8",
+    **{f"music/{world}.mp3": "audio/mpeg" for world in WORLDS},
     "planet-map.js": "text/javascript; charset=utf-8",
     "map-ui.js": "text/javascript; charset=utf-8",
     "solar-system.js": "text/javascript; charset=utf-8",

@@ -1,0 +1,106 @@
+[
+  {
+    "world": "earth",
+    "title": "Gymnopédie No. 1",
+    "composer": "Erik Satie",
+    "performer": "Michael Laucke",
+    "instrument": "classical guitar",
+    "source": "https://commons.wikimedia.org/wiki/File:Satie_Gymnopedie_No_1_performed_by_Michael_Laucke.flac",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/a/a6/Satie_Gymnopedie_No_1_performed_by_Michael_Laucke.flac",
+    "license": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "sha256": "b284038a8bc0d7c6faf36f430cfbca965da3334f0cd2532560d864b0859c85a0",
+    "credit": "Guitar arrangement by Michael Laucke."
+  },
+  {
+    "world": "mars",
+    "title": "Peaceful Village",
+    "composer": "Stefan Grossmann",
+    "performer": "Stefan Grossmann",
+    "instrument": "instrumental",
+    "source": "https://opengameart.org/content/peaceful-village",
+    "download": "https://opengameart.org/sites/default/files/Creative%20Commons%20Music%20Peaceful%20Village%20Stefan%20Grossmann.flac",
+    "license": "https://creativecommons.org/licenses/by/4.0/",
+    "sha256": "85bb1a0a8bc43e5ffeba5c77657f969cfd658117b8e365e6a62629e81e22b29d",
+    "target_lufs": -28
+  },
+  {
+    "world": "mercury",
+    "title": "Recuerdos de la Alhambra",
+    "composer": "Francisco Tárrega",
+    "performer": "Carlo Alberto Boni",
+    "instrument": "classical guitar",
+    "source": "https://commons.wikimedia.org/wiki/File:Recuerdos_de_la_Alhambra.ogg",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/a/a3/Recuerdos_de_la_Alhambra.ogg",
+    "license": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "sha256": "aac6344dd8db0796589dede5cc2df72b766153942d436f5be300c81e3bfce675"
+  },
+  {
+    "world": "venus",
+    "title": "Gnossienne No. 1",
+    "composer": "Erik Satie",
+    "performer": "La Pianista",
+    "instrument": "piano",
+    "source": "https://commons.wikimedia.org/wiki/File:Satie_-_Gnossienne_1.ogg",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/9/91/Satie_-_Gnossienne_1.ogg",
+    "license": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "sha256": "05a57d53d115f0220dc2e73545f12d896f34650107e264a380a4204ca85c02e9"
+  },
+  {
+    "world": "jupiter",
+    "title": "Cello Suite No. 3 in C major — Sarabande",
+    "composer": "J. S. Bach",
+    "performer": "John Michel",
+    "instrument": "cello",
+    "source": "https://commons.wikimedia.org/wiki/File:JOHN_MICHEL_CELLO-J_S_BACH_CELLO_SUITE_3_in_C_Sarabande.ogg",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/c/c0/JOHN_MICHEL_CELLO-J_S_BACH_CELLO_SUITE_3_in_C_Sarabande.ogg",
+    "license": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "sha256": "5e577acbb3dd528a8642add0a92e4488f51969e57014aad96428e7d3f8b91c93"
+  },
+  {
+    "world": "saturn",
+    "title": "Gymnopédie No. 3",
+    "composer": "Erik Satie",
+    "performer": "Michael Laucke",
+    "instrument": "classical guitar",
+    "source": "https://commons.wikimedia.org/wiki/File:Satie_Gymnopedie_No_3_performed_by_Michael_Laucke.flac",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/d/db/Satie_Gymnopedie_No_3_performed_by_Michael_Laucke.flac",
+    "license": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "sha256": "7c2a5de4a9e6dd7b531552723541fcd84abbe545bee929a672cffc3cc5d62e3f",
+    "credit": "Guitar arrangement by Michael Laucke."
+  },
+  {
+    "world": "uranus",
+    "title": "Partita in A minor — Sarabande",
+    "composer": "J. S. Bach",
+    "performer": "Alex Murray",
+    "instrument": "traverso flute",
+    "source": "https://commons.wikimedia.org/wiki/File:Bach_-_Partita_For_Solo_Flute_-_Traverso_-_3._Sarabande.ogg",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/1/15/Bach_-_Partita_For_Solo_Flute_-_Traverso_-_3._Sarabande.ogg",
+    "license": "https://creativecommons.org/licenses/by-sa/2.0/",
+    "sha256": "49e49c918ceeb874907c95cdca850bd6249f7c1d2e2ea565aeb0d9547bd9b96a",
+    "credit": "From the Al Goldstein collection, Pandora Music repository at ibiblio.org."
+  },
+  {
+    "world": "neptune",
+    "title": "Prelude in E minor, Op. 28 No. 4",
+    "composer": "Frédéric Chopin",
+    "performer": "Ivan Ilić",
+    "instrument": "piano",
+    "source": "https://commons.wikimedia.org/wiki/File:Ivan_Ili%C4%87-Chopin_Prelude_Opus_28_n.4.ogg",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/a/a2/Ivan_Ili%C4%87-Chopin_Prelude_Opus_28_n.4.ogg",
+    "license": "https://creativecommons.org/licenses/by/3.0/",
+    "sha256": "c64c302948b73e251478b4e4a9e44d0e92ceec2e34f95e02d6c1130420dcd7cf",
+    "credit": "Recording © Ivan Ilić."
+  },
+  {
+    "world": "europa",
+    "title": "Gnossienne No. 2",
+    "composer": "Erik Satie",
+    "performer": "La Pianista",
+    "instrument": "piano",
+    "source": "https://commons.wikimedia.org/wiki/File:Gnossienne_2_(Satie).ogg",
+    "download": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Gnossienne_2_%28Satie%29.ogg",
+    "license": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "sha256": "0626906fd26a0c7bf39f9802c639d7ccb16ae555cda148db28d396e19aa90d6d"
+  }
+]

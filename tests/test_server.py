@@ -46,7 +46,7 @@ class ServerTests(unittest.TestCase):
         status, mime, css = self.request("/campaign.css")
         self.assertEqual((status, mime), (200, "text/css"))
         self.assertIn(b".terrain-map", css)
-        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css"),("/tutorial.js", "text/javascript"),("/tutorial.css", "text/css"),("/advisor.js", "text/javascript"),("/advisor.css", "text/css")):
+        for path, expected_type in (("/campaign-save.js", "text/javascript"),("/planet-music.js", "text/javascript"),("/planet-map.js", "text/javascript"),("/map-ui.js", "text/javascript"),("/map-game.css", "text/css"),("/solar-system.js", "text/javascript"),("/solar-system.css", "text/css"),("/tutorial.js", "text/javascript"),("/tutorial.css", "text/css"),("/advisor.js", "text/javascript"),("/advisor.css", "text/css")):
             code, kind, body = self.request(path)
             self.assertEqual((code,kind),(200,expected_type))
             self.assertGreater(len(body),100)
@@ -56,6 +56,19 @@ class ServerTests(unittest.TestCase):
         status, mime, js = self.request("/app.js")
         self.assertEqual((status, mime), (200, "text/javascript"))
         self.assertIn(b"./bridge.js", js)
+
+    def test_local_music_for_every_world(self):
+        from ares.campaign_data import WORLDS
+        status, mime, credits = self.request("/music/credits.txt")
+        self.assertEqual((status, mime), (200, "text/plain"))
+        self.assertIn(b"https://creativecommons.org/licenses/", credits)
+        for world in WORLDS:
+            with self.subTest(world=world):
+                self.assertIn(world.title().encode() + " — ".encode(), credits)
+                status, mime, track = self.request(f"/music/{world}.mp3")
+                self.assertEqual((status, mime), (200, "audio/mpeg"))
+                self.assertTrue(track.startswith(b"ID3"))
+                self.assertGreater(len(track), 100_000)
 
     def test_advice_endpoint(self):
         state = json.loads(self.request("/api/campaign/new", {"seed": "AURA"})[2])["state"]

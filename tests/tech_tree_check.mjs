@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {createPlanetMusic} from '../web/planet-music.js';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {techTreeView,TREE,treeLayout,treeEdges,ancestry} from '../web/tech-tree.js';
@@ -6,7 +7,6 @@ import {mapScreen} from '../web/map-ui.js';
 import {solarSystemView} from '../web/solar-system.js';
 import {guideSteps} from '../web/program-ui.js';
 import {advisorView,badgeCount} from '../web/advisor.js';
-import {shipSvg} from '../web/ship-view.js';
 
 const f=JSON.parse(readFileSync(0,'utf8'));
 const before=JSON.stringify(f),layout=treeLayout(f.catalog);
@@ -55,10 +55,10 @@ const handlers={},requests=[],saves=[],reads=[];
 const el={dataset:{},tagName:'BUTTON',inert:false,style:{},setAttribute(){},focus(){},closest(){return null},querySelector(){return el},querySelectorAll(){return []},append(){}};
 const viewport={...el,clientWidth:720,scrollLeft:30,scrollTop:75};
 const app={...el,innerHTML:'',addEventListener(type,callback){handlers[type]=callback;}};
-const context=vm.createContext({console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,
+const context=vm.createContext({performance,createPlanetMusic,console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,
   localStorage:{getItem(){return null},setItem(){}},window:{setTimeout(){}},
   document:{activeElement:null,querySelector(s){return s==='#app'?app:s==='.tech-viewport'?viewport:el},querySelectorAll(){return []},addEventListener(){},createElement(){return {...el,remove(){}}}},
-  mountPlanetMap(){return {destroy(){}}},mountSolarSystem(){return {destroy(){}}},mapScreen,solarSystemView,guideSteps,advisorView,badgeCount,shipSvg,
+  mountPlanetMap(){return {destroy(){}}},mountSolarSystem(){return {destroy(){}}},mapScreen,solarSystemView,guideSteps,advisorView,badgeCount,mountShip3d(){return {destroy(){}}},
     createTutorial:()=>({sync(){},active:()=>false}),techTreeView,TREE,
   loadCampaign:async()=>null,saveCampaign:async state=>saves.push(structuredClone(state)),
   apiStub:async(path,payload)=>{

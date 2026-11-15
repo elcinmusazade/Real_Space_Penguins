@@ -8,10 +8,12 @@ import {applyRuleAction, applyRuleField} from './rule-editor.js';
 import {playLaunch, playArrival} from './flight-view.js';
 import {createTutorial, settingsView} from './tutorial.js';
 import {advisorView, badgeCount} from './advisor.js';
+import {createPlanetMusic} from './planet-music.js';
 import {mountShip3d} from './ship-view.js';
 
 import {loadCampaign,saveCampaign} from './campaign-save.js';
 const app = document.querySelector('#app');
+const music = createPlanetMusic(globalThis, document);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = value => Math.round(Number(value) || 0).toLocaleString('en-US');
 const fmtTurn = value => String(value).padStart(2, '0');
@@ -71,7 +73,7 @@ async function initialize() {
     if(!state)state=(await api('/api/campaign/new',{seed:'HORIZON-01'})).state;
     resetDrafts();
     openHome();
-    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection(),draft,softwareTab,softwareDraft}),{suggest:suggestTile,answer:applyAnswer});
+    tutorial=createTutorial(()=>({state,tab,selectedBuilding,home:homeHub(),softwareTested:Boolean(softwareTest?.ok),blocked:Boolean(modal||solarOpen),selection:tutorialSelection(),draft,softwareTab,softwareDraft}),{suggest:suggestTile,answer:applyAnswer,firstVisit:!previous});
     await save(); render();
   }catch(error){app.innerHTML=`<main class="error-page"><h1>Mission engine unavailable</h1><p>${esc(error.message)}</p><p>Run <code>python3 -m ares.server</code> from the project directory.</p><button onclick="location.reload()">Retry connection</button></main>`;}
 }
@@ -336,7 +338,7 @@ function modalMarkup(){
   if(modal==='event'&&state.event)return `<div class="modal-scrim"><section class="aura-modal event-modal" role="dialog" aria-modal="true" aria-labelledby="event-title"><div class="modal-aura danger">!</div><div class="eyebrow">ENVIRONMENTAL EVENT · TURN ${fmtTurn(state.turn)}</div><h2 id="event-title">${esc(state.event.title)}</h2><p>${esc(state.event.description)}</p><div class="event-options">${state.event.choices.map(c=>`<button class="event-option" data-action="event-choice" data-id="${esc(c.id)}"><b>${esc(c.label)} →</b><span>${esc(c.description)}</span></button>`).join('')}</div></section></div>`;
   if(modal==='confirm-launch'&&quote?.ok){const failed=quote.checks.filter(c=>!c.ok);return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><div class="modal-aura danger">!</div><div class="eyebrow">LAUNCH CHECK FAILED</div><h2 id="confirm-title">This mission ${esc((outcomeText[quote.outcome]||'').toLowerCase())}.</h2><ul class="check-list">${failed.map(c=>`<li class="bad"><b>✕ ${esc(c.label)}</b><span>${esc(c.detail)}</span></li>`).join('')}</ul><p>Launching anyway spends the credits${quote.outcome==='scrub'?'; the spacecraft is returned.':quote.outcome==='stranded'?', the spacecraft and its propellant.':' and the spacecraft will not achieve its objective.'}</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">FIX THE PLAN</button><button class="button primary risky" data-action="confirm-launch">LAUNCH ANYWAY</button></div></section></div>`;}
   if(modal==='advisor')return advisorView({advice:adviceState===state?advice:null,topic:adviceTopic});
-  if(modal==='settings')return settingsView({tutorial:tutorial.progress(),mapMotion,guideHidden});
+  if(modal==='settings')return settingsView({tutorial:tutorial.progress(),mapMotion,guideHidden,music:music.settings});
   if(modal==='reset')return `<div class="modal-scrim"><section class="aura-modal compact" role="dialog" aria-modal="true" aria-labelledby="reset-title"><div class="eyebrow">CAMPAIGN RESET</div><h2 id="reset-title">Start a new space programme?</h2><p>Begin at Mars HQ with no Earth hub. Travel to Earth and land before building there. Your current browser save will be replaced.</p><div class="modal-buttons"><button class="button secondary" data-action="dismiss-modal">CANCEL</button><button class="button primary" data-action="confirm-reset">START ON MARS</button></div></section></div>`;
   return '';
 }
@@ -415,6 +417,7 @@ function mountGameMap(groundView){
 
 function render(){
   if(!state||!catalog)return;
+  music.select(solarOpen && catalog.worlds[solarSelected] ? solarSelected : selectedWorld);
   const focused=document.activeElement;
   const panel=document.querySelector('.game-screen-panel'),panelScroll=panel&&renderedTab===tab?panel.scrollTop:null;
   const tree=document.querySelector('.tech-viewport'),treeScroll=tree?{left:tree.scrollLeft,top:tree.scrollTop}:null;
@@ -631,6 +634,8 @@ app.addEventListener('click',async event=>{
 
 app.addEventListener('change',async event=>{
   const control=event.target,field=control.dataset.field;
+  if(field==='music-volume')return;  // Handled live by the input event.
+  if(field==='music-enabled'){music.setEnabled(control.checked);return;}
   if(control.dataset.ruleField){
     if(control.dataset.kind==='software'){softwareDraft={...softwareDraft,rules:applyRuleField(softwareDraft.rules,control.dataset,control.value,softwareConfig(catalog))};softwareTest=null;}
     else ordersDraft=applyRuleField(ordersDraft,control.dataset,control.value,ordersConfig(catalog,state));
@@ -655,6 +660,12 @@ app.addEventListener('change',async event=>{
 
 let propTimer=null;
 app.addEventListener('input',event=>{
+  if(event.target.dataset.field==='music-volume'){
+    music.setVolume(Number(event.target.value));
+    const output=document.querySelector('#music-level');
+    if(output)output.value=music.settings.volume+'%';
+    return;
+  }
   const control=event.target;
   if(control.dataset.field!=='propellantKg'||control.type!=='range')return;
   draft.propellantKg=Number(control.value);

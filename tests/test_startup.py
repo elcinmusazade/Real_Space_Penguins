@@ -11,6 +11,12 @@ from campaign_fixtures import established_campaign, earth_campaign
 
 
 class StartupTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("node"), "Optional soundtrack controller check requires Node")
+    def test_planet_music_playback_and_settings(self):
+        result = subprocess.run(["node", "tests/music_check.mjs"], cwd=Path(__file__).resolve().parents[1],
+                                text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     @unittest.skipUnless(shutil.which("node"), "Optional startup/controller check requires Node")
     def test_mars_home_earth_travel_and_explicit_mission_navigation(self):
         fresh = campaign.create_campaign("STARTUP")

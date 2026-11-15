@@ -1,24 +1,25 @@
 import assert from 'node:assert/strict';
+import {createPlanetMusic} from '../web/planet-music.js';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {mapScreen} from '../web/map-ui.js';
 import {solarSystemView} from '../web/solar-system.js';
 import {guideSteps} from '../web/program-ui.js';
 import {advisorView,badgeCount} from '../web/advisor.js';
-import {shipSvg} from '../web/ship-view.js';
 
 const fixture=JSON.parse(readFileSync(0,'utf8'));
 const source=readFileSync(new URL('../web/campaign.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/initialize\(\);\s*$/,'');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-async function session(previous){
+const tutorialSource=readFileSync(new URL('../web/tutorial.js',import.meta.url),'utf8').replace(/^export /gm,'');
+async function session(previous,prefs=new Map()){
   const handlers={},requests=[],saves=[];
-  const el={dataset:{},tagName:'BUTTON',inert:false,style:{},setAttribute(){},focus(){},closest(){return null},querySelector(){return el},querySelectorAll(){return []},append(){}};
+  const el={dataset:{},tagName:'BUTTON',inert:false,style:{},setAttribute(){},focus(){},getClientRects(){return []},closest(){return null},querySelector(){return el},querySelectorAll(){return []},append(){}};
+  let tutorialRoot;
   const app={...el,innerHTML:'',addEventListener(type,callback){handlers[type]=callback;}};
-  const context=vm.createContext({console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,
-    localStorage:{getItem(){return null},setItem(){}},window:{setTimeout(){}},
-    document:{activeElement:null,querySelector(s){return s==='#app'?app:el},querySelectorAll(){return []},addEventListener(){},createElement(){return {...el,remove(){}}}},
-    mountPlanetMap(){return {destroy(){}}},mountSolarSystem(){return {destroy(){}}},mapScreen,solarSystemView,guideSteps,advisorView,badgeCount,shipSvg,
-    createTutorial:()=>({sync(){},active:()=>false}),
+  const context=vm.createContext({performance,createPlanetMusic,console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,
+    localStorage:{getItem:k=>prefs.get(k)??null,setItem:(k,v)=>prefs.set(k,v)},window:{setTimeout(){},addEventListener(){}},
+    document:{activeElement:null,body:{append(node){tutorialRoot=node}},querySelector(s){return s==='#app'?app:el},querySelectorAll(){return []},addEventListener(){},createElement(){return {...el,innerHTML:'',addEventListener(){},querySelector(){return null},remove(){}}}},
+    mountPlanetMap(){return {destroy(){}}},mountSolarSystem(){return {destroy(){}}},mapScreen,solarSystemView,guideSteps,advisorView,badgeCount,mountShip3d(){return {destroy(){}}},
     loadCampaign:async()=>structuredClone(previous),saveCampaign:async state=>saves.push(structuredClone(state)),
     apiStub:async(path,payload)=>{
       requests.push({path,payload});
@@ -31,22 +32,44 @@ async function session(previous){
       throw new Error(`Unexpected API request ${path}`);
     }
   });
-  vm.runInContext(source+`\napi=apiStub;globalThis.initialize=initialize;globalThis.view=()=>({tab,selectedWorld,selectedHub,selectedTile,modal,solarOpen,freight,draft,state});`,context);
+  vm.runInContext(`{ ${tutorialSource}
+globalThis.createTutorial=createTutorial; globalThis.settingsView=settingsView; }`,context);
+  vm.runInContext(source+`\napi=apiStub;globalThis.initialize=initialize;globalThis.view=()=>({tab,selectedWorld,selectedHub,selectedTile,modal,solarOpen,freight,draft,state,track:music.settings.title});`,context);
   await context.initialize();await tick();
   const click=async(action,id)=>{await handlers.click({target:{closest(){return {dataset:{action,id},disabled:false}}}});await tick();};
   const change=async(field,value)=>{await handlers.change({target:{dataset:{field},value,checked:value===true}});await tick();};
-  return {context,app,requests,saves,click,change};
+  return {context,app,requests,saves,click,change,tutorialRoot};
 }
 function onMars(s,hubId='H1'){
   const v=s.context.view();
   assert.equal(v.selectedWorld,'mars');assert.equal(v.selectedHub,hubId);assert.equal(v.tab,'system');assert.equal(v.modal,null);
   assert.equal(v.selectedTile,fixture.catalog.mapSize/2*(fixture.catalog.mapSize+1));
   assert.ok(s.app.innerHTML.includes('map-theme-mars'));
-  assert.ok(s.app.innerHTML.includes('Explore Mars HQ'));
+  assert.equal(s.app.innerHTML.includes('Explore Mars HQ'), !s.tutorialRoot.innerHTML,
+    'the first-mission guide appears when the tutorial is closed');
   assert.ok(!s.app.innerHTML.includes('class="modal-scrim"'));
   assert.ok(!s.app.innerHTML.includes('class="game-screen-panel"'));
 }
-const s=await session(null);onMars(s);
+const prefs=new Map(), tutorialKey='ares.first-light.tutorial.v1';
+const s=await session(null,prefs);onMars(s);
+assert.match(s.tutorialRoot.innerHTML,/Welcome, Commander/);
+assert.deepEqual(JSON.parse(prefs.get(tutorialKey)),{status:'active',step:0});
+const reload=await session(s.saves.at(-1),prefs);
+assert.match(reload.tutorialRoot.innerHTML,/Welcome, Commander/);
+await reload.click('settings-open');await reload.click('tutorial-close');await reload.click('dismiss-modal');
+assert.equal(reload.tutorialRoot.innerHTML,'');
+const closed=await session(reload.saves.at(-1),prefs);
+assert.equal(closed.tutorialRoot.innerHTML,'');
+await closed.click('settings-open');await closed.click('tutorial-resume');
+assert.match(closed.tutorialRoot.innerHTML,/Welcome, Commander/);
+prefs.set(tutorialKey,JSON.stringify({status:'active',step:1}));
+assert.match((await session(s.saves.at(-1),prefs)).tutorialRoot.innerHTML,/Time and resources/);
+prefs.set(tutorialKey,JSON.stringify({status:'done',step:1}));
+assert.equal((await session(null,prefs)).tutorialRoot.innerHTML,'');
+assert.equal(s.context.view().track,'Peaceful Village · Stefan Grossmann');
+await s.click('solar-open');await s.click('solar-select','saturn');
+assert.equal(s.context.view().track,'Gymnopédie No. 3 · Michael Laucke');
+await s.click('solar-close');assert.equal(s.context.view().track,'Peaceful Village · Stefan Grossmann');
 assert.equal(s.context.view().state.hubs.length,1);
 assert.ok(!s.requests.some(r=>r.path.endsWith('/quote')),'startup must not open or prefetch the mission designer');
 await s.click('solar-open');
@@ -84,6 +107,8 @@ await s.click('confirm-reset');onMars(s);assert.equal(s.context.view().state.hub
 assert.equal(s.saves.at(-1).hubs.length,1);
 
 const old=await session(fixture.existing);onMars(old,'H2');
+assert.equal(old.tutorialRoot.innerHTML,'','an existing campaign can start the tutorial from Settings');
+await old.click('settings-open');assert.match(old.app.innerHTML,/START TUTORIAL/);await old.click('dismiss-modal');
 assert.deepEqual(old.context.view().state,fixture.existing,'loading must preserve existing hubs and progress');
 assert.ok(!old.requests.some(r=>r.path.endsWith('/new')),'loading a campaign must not reset it');
 await old.click('nav','logistics');
@@ -127,7 +152,7 @@ for(const platform of fixture.platforms){
  await outer.click('map-plan');
  assert.equal(outer.context.view().draft.destination,world);
  assert.equal(outer.context.view().draft.site,fixture.catalog.worlds[world].sites[0]);
- assert.ok(outer.app.innerHTML.includes('Deploy atmospheric platform'));
+ assert.ok(outer.app.innerHTML.includes('value="surface" selected>Atmospheric platform</option>'));
  assert.ok(outer.app.innerHTML.includes('GAME-ESTIMATE TRANSFER'));
  assert.ok(!outer.app.innerHTML.includes('GMAT LAUNCH WINDOWS'));
  await outer.click('home');onMars(outer);

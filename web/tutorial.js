@@ -186,7 +186,7 @@ function persist(progress) {
 }
 
 /** Settings dialog markup (rendered by campaign.js inside its modal system). */
-export function settingsView({tutorial, mapMotion, guideHidden}) {
+export function settingsView({tutorial, mapMotion, guideHidden, music}) {
   const status = {offer: 'Not started', active: `In progress · step ${tutorial.step + 1} of ${STEPS.length}`, paused: `Closed at step ${tutorial.step + 1} of ${STEPS.length}`, done: 'Completed'}[tutorial.status];
   return `<div class="modal-scrim"><section class="aura-modal compact settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <div class="eyebrow">⚙ SETTINGS</div><h2 id="settings-title">Game settings</h2>
@@ -196,6 +196,9 @@ export function settingsView({tutorial, mapMotion, guideHidden}) {
         : tutorial.status === 'paused' ? '<button class="button secondary" data-action="tutorial-resume">RESUME</button>' : ''}
       <button class="button primary" data-action="tutorial-restart">${tutorial.status === 'offer' ? 'START TUTORIAL' : 'RESTART TUTORIAL'}</button></div></div>
     <label class="settings-row settings-toggle"><div><b>First-mission guide card</b><small>The small next-step card on the map when the tutorial is off.</small></div><input type="checkbox" data-action="settings-guide" ${guideHidden ? '' : 'checked'}></label>
+    <label class="settings-row settings-toggle"><div><b>Planet music</b><small>${music.unavailable?'Audio unavailable':esc(music.title)}</small></div><input type="checkbox" data-field="music-enabled" ${music.enabled?'checked':''}></label>
+    <a class="music-credits" href="./music/credits.txt" target="_blank" rel="noopener">Music credits and recordings ↗</a>
+    <label class="settings-row"><b>Music volume</b><span class="music-level"><input type="range" min="0" max="100" step="1" value="${music.volume}" data-field="music-volume" aria-label="Music volume"><output id="music-level">${music.volume}%</output></span></label>
     <label class="settings-row settings-toggle"><div><b>Ambient map motion</b><small>Animated water, foliage and haze. Reduced-motion settings are always respected.</small></div><input type="checkbox" data-action="settings-motion" ${mapMotion ? 'checked' : ''}></label></div>
     <div class="modal-buttons"><button class="button primary" data-action="dismiss-modal">DONE</button></div></section></div>`;
 }
@@ -204,8 +207,12 @@ export function settingsView({tutorial, mapMotion, guideHidden}) {
  * Create the tutorial controller. `getContext()` returns
  * {state, tab, selectedBuilding, home, softwareTested, blocked}.
  */
-export function createTutorial(getContext, actions = {}) {
+export function createTutorial(getContext, {suggest, answer, firstVisit = false} = {}) {
   let progress = loadProgress();
+  if (firstVisit && progress.status === 'offer') {
+    progress = {status: 'active', step: 0};
+    persist(progress);
+  }
   let base = null, baseStep = -1, scrolledStep = -1, frame = 0, keyboard = false;
   let userPos = null, dragging = false;
   try { userPos = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch { /* storage unavailable */ }
@@ -256,18 +263,9 @@ export function createTutorial(getContext, actions = {}) {
       <div class="tut-foot"><span class="tut-count">${n + 1} / ${total}</span>
         <div class="tut-buttons">${n > 0 ? '<button class="button secondary" data-tut="back">BACK</button>' : ''}
         ${missing && current.goto ? `<button class="button primary" data-tut="goto">TAKE ME THERE</button>` : ''}
-        ${!missing && current.assist && actions.suggest ? `<button class="button primary" data-tut="assist">SHOW ME</button>` : ''}
-        ${!missing && current.answer && actions.answer ? `<button class="button primary" data-tut="answer">SET IT FOR ME</button>` : ''}
+        ${!missing && current.assist && suggest ? `<button class="button primary" data-tut="assist">SHOW ME</button>` : ''}
+        ${!missing && current.answer && answer ? `<button class="button primary" data-tut="answer">SET IT FOR ME</button>` : ''}
         ${current.action ? `<button class="button secondary" data-tut="next">SKIP STEP</button>` : `<button class="button primary" data-tut="next">${n === total - 1 ? 'FINISH' : 'NEXT'}</button>`}</div></div>`;
-  }
-
-  function offerMarkup() {
-    return `<div class="tut-card tut-offer" role="dialog" aria-modal="false" aria-labelledby="tut-title">
-      <div class="tut-head" data-drag><span class="tut-grip" aria-hidden="true">⠿</span><span class="tut-chapter">NEW COMMANDER</span><button class="tut-close" data-tut="dismiss" aria-label="Dismiss">✕</button></div>
-      <h2 id="tut-title">Learn the ropes?</h2>
-      <p class="tut-body">A guided tutorial walks you through exploring Mars, building, keeping crews alive, writing flight software and launching your first mission.</p>
-      <p class="tut-hint"><span aria-hidden="true">💡</span> The tutorial card can be dragged out of your way by its top bar. You can restart it later from ⚙ Settings.</p>
-      <div class="tut-foot"><span></span><div class="tut-buttons"><button class="button secondary" data-tut="dismiss">NOT NOW</button><button class="button primary" data-tut="start">START TUTORIAL</button></div></div></div>`;
   }
 
   function place(el) {
@@ -276,7 +274,7 @@ export function createTutorial(getContext, actions = {}) {
     const vw = window.innerWidth, vh = window.innerHeight, m = 12;
     if (!el) {
       spot.style.display = 'none';
-      root.classList.toggle('tut-dim', step()?.center === true || progress.status === 'offer');
+      root.classList.toggle('tut-dim', step().center === true);
       if (userPos) { pin(card); return; }
       card.style.left = `${Math.max(m, (vw - card.offsetWidth) / 2)}px`;
       card.style.top = `${Math.max(m, (vh - card.offsetHeight) / 2)}px`;
@@ -317,7 +315,6 @@ export function createTutorial(getContext, actions = {}) {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
       if (progress.status === 'active' && root.firstChild) place(step().center ? null : target(step()));
-      else if (progress.status === 'offer' && root.firstChild) place(null);
     });
   }
 
@@ -325,12 +322,7 @@ export function createTutorial(getContext, actions = {}) {
   function sync() {
     if (dragging) return; // rebuilding now would drop the card back to its old spot
     const ctx = getContext();
-    if (ctx.blocked || (progress.status !== 'active' && progress.status !== 'offer')) { root.innerHTML = ''; return; }
-    if (progress.status === 'offer') {
-      if (!root.querySelector('.tut-offer')) root.innerHTML = `<div class="tut-spot" aria-hidden="true"></div>${offerMarkup()}`;
-      reposition();
-      return;
-    }
+    if (ctx.blocked || progress.status !== 'active') { root.innerHTML = ''; return; }
     if (baseStep !== progress.step) enterStep();
     const current = step();
     if (current.action && current.done(ctx, base)) {
@@ -353,13 +345,12 @@ export function createTutorial(getContext, actions = {}) {
     if (!button) return;
     keyboard = event.detail === 0;
     const what = button.dataset.tut;
-    if (what === 'start') go(0);
-    else if (what === 'dismiss' || what === 'close') { progress = {...progress, status: what === 'close' ? 'paused' : 'paused'}; save(); sync(); }
+    if (what === 'close') { progress = {...progress, status: 'paused'}; save(); sync(); }
     else if (what === 'move') { /* focus target for arrow-key moves */ }
     else if (what === 'next') go(progress.step + 1);
     else if (what === 'back') go(Math.max(0, progress.step - 1));
-    else if (what === 'assist') { if (!actions.suggest?.(step().assist)) { const note = root.querySelector('.tut-status'); if (note) note.textContent = 'No suitable sector is visible right now. Try scanning or zooming out.'; } }
-    else if (what === 'answer') actions.answer?.(step().answer);
+    else if (what === 'assist') { if (!suggest?.(step().assist)) { const note = root.querySelector('.tut-status'); if (note) note.textContent = 'No suitable sector is visible right now. Try scanning or zooming out.'; } }
+    else if (what === 'answer') answer?.(step().answer);
     else if (what === 'goto') document.querySelector(`[data-action="nav"][data-id="${step().goto}"]`)?.click();
   });
   root.addEventListener('pointerdown', event => {
@@ -399,7 +390,7 @@ export function createTutorial(getContext, actions = {}) {
   return {
     sync,
     progress: () => ({...progress}),
-    active: () => progress.status === 'active' || progress.status === 'offer',
+    active: () => progress.status === 'active',
     restart: () => go(0),
     resume: () => { progress = {...progress, status: 'active'}; save(); enterStep(); sync(); },
     close: () => { progress = {...progress, status: 'paused'}; save(); sync(); },

@@ -21,9 +21,13 @@ Existing saves retain their hubs and progress. To use the Mars-only beginning wi
 
 Press **✺** (top right) for AURA's advice. It lists what needs your attention right now, most urgent first: supplies that will run out (projected by simulating the next turn), crew health, hazards you can still prepare for, worn buildings, flight software that fails the lab test, cheap Earth launch windows, goal deadlines, idle research. Every item has a button that takes you to the fix. A red badge on ✺ means something urgent or a warning is waiting. Topic explanations and the welcome briefing are in the same panel. AURA is computed from the game rules, offline; it is not a live AI.
 
+## Planet music
+
+Click or tap the game to hear its selected recording. Mars plays *Peaceful Village* by Stefan Grossmann quietly in the background while you build. The other worlds feature solo cello, classical guitar, piano and traverso flute. Settings shows the title and musician. The [music credits](web/music/credits.txt) list the original recordings and their licenses. Selecting a planet or Europa in the solar navigator previews its music. Closing the navigator brings back the map's theme. Open **⚙ Settings → Planet music** to mute it or adjust **Music volume**. These preferences are saved in this browser. The soundtrack pauses when the tab is hidden.
+
 ## Tutorial
 
-New players are offered a guided tutorial on first load. It spotlights the real controls, explains each mechanic, gives a hint per step, and waits for you to act (scan a sector, build, end the turn, test flight software, launch). Five chapters: Welcome, Explore & build, Stay alive, First mission, Programme. **SKIP STEP** never leaves you stuck, ✕ closes it, and **⚙ Settings** (top right) resumes, closes or restarts it, and also toggles the first-mission guide card and ambient map motion. Progress is a per-browser preference, separate from the game save.
+The first time you open the campaign in a browser, the guided tutorial starts at **Welcome, Commander** on the Mars map. Reloading resumes your current step. Closing or finishing the tutorial keeps it closed until you reopen it from **⚙ Settings**. It spotlights the real controls, explains each mechanic, gives a hint per step, and waits for you to act (scan a sector, build, end the turn, test flight software, launch). Five chapters: Welcome, Explore & build, Stay alive, First mission, Programme. **SKIP STEP** never leaves you stuck, ✕ closes it, and **⚙ Settings** (top right) resumes, closes or restarts it, and also toggles the first-mission guide card and ambient map motion. Progress is a per-browser preference, separate from the game save.
 
 ## Campaign controls
 
@@ -71,7 +75,7 @@ node --check web/map-ui.js
 | `web/index.html`, `web/campaign.js`, `web/campaign.css` | Campaign interface, mission designer, and local saves |
 | `web/solar-system.js`, `web/solar-system.css` | Collapsible solar navigation, schematic orbits, hub/traffic details and pan/zoom |
 | `ares/advice.py`, `web/advisor.js`, `web/advisor.css` | AURA advice engine (read-only, Python) and its panel/badge |
-| `web/tutorial.js`, `web/tutorial.css` | Interactive tutorial (spotlight coach marks, 24 steps in 5 chapters) and the ⚙ Settings dialog. Presentation only |
+| `web/tutorial.js`, `web/tutorial.css` | Interactive tutorial (spotlight coach marks across 5 chapters) and the ⚙ Settings dialog. Presentation only |
 | `web/map-ui.js`, `web/map-game.css`, `web/planet-map.js` | Map-first in-game HUD, presentation, and draggable/zoomable isometric canvas |
 | `ares/engine.py`, `ares/rules.py` | Preserved classic Mars V1 rules |
 | `web/classic.html`, `web/app.js`, `web/bridge.js` | Preserved V1 browser game and Python bridge |

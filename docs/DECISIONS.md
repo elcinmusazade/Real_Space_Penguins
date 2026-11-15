@@ -176,7 +176,7 @@ Do not expand or relabel the existing four-destination GMAT table. New outer rou
 
 **Status:** Implemented on `feature/tutorial`. **Date:** 2026-11-15. **Reason:** User asked for a typical game tutorial with mechanics, objectives and hints, closable and restartable from settings.
 
-Use spotlight coach marks over the real interface rather than a separate sandbox, so the player learns the actual controls. Action steps wait for the real action and advance on their own, but SKIP STEP is always offered so no one gets stuck. The tutorial is presentation only: it reads state, never changes it, and stores its progress as a browser preference (not in the Python-validated save). Settings is a new ⚙ dialog for tutorial control plus the existing guide-card and ambient-motion preferences. The overlay sits above the map HUD but below the solar navigator, dialogs and flight animations.
+Use spotlight coach marks over the real interface rather than a separate sandbox, so the player learns the actual controls. Action steps wait for the real action and advance on their own, but SKIP STEP is always offered so no one gets stuck. The tutorial is presentation only: it reads state, never changes it, and stores its progress as a browser preference (not in the Python-validated save). Settings is a new ⚙ dialog for tutorial control plus the existing guide-card and ambient-motion preferences. The overlay sits above the map HUD but below the solar navigator, dialogs and flight animations. On a first visit, start the walkthrough directly on Mars. Use the saved campaign and tutorial preference to distinguish a new player from one returning to a game.
 
 
 ## D-022 — AURA advice computed from the rules
@@ -195,3 +195,11 @@ User decisions: all six part slots; the fit check only warns (a poor fit makes t
 ## D-024 — Colony production and spacecraft fitting
 
 **2026-11-15 · feature/shipyard-rework.** The user requested more depth in buildings and resources. Two optional production chains give established extraction buildings a second use. Water can support crews or make fuel for onward travel. Materials can expand the base or become parts for repairs, export and ship fitting. Each factory protects local reserves by default. A player can take the risk of spending those reserves for an urgent batch. The recipes, reserves and credit exchange are gameplay values.
+
+## D-025 — Həzin planet themes
+
+The player requested a more melodic, wistful soundtrack and found the layered arrangements irritating. Each world now has a single, softly played piano tune, with its own register, phrasing and cadence. Short silences between phrases give the melody room during long play sessions.
+
+## D-026 — Existing recordings for the planetary soundtrack
+
+The player requested music from the internet after hearing the generated themes. The game uses one complete, licensed recording per world. After finding the Mars jazz theme too aggressive, the player asked for quiet village music during construction. Mars uses Stefan Grossmann’s *Peaceful Village* from OpenGameArt, with a −28 LUFS target. The eight other recordings come from Wikimedia Commons. A constant gain adjustment suits background playback while preserving the musician’s phrasing and dynamics. Settings links to the original recordings and their licenses.

@@ -22,6 +22,7 @@ Python 3.9+, standard library only. `python3 -m ares.server` starts a local `Thr
 | `web/advisor.js`, `web/advisor.css` | ✺ advice panel, badge and topic explanations; actions reuse existing navigation and the `prepare` command |
 | `web/tutorial.js`, `web/tutorial.css` | Tutorial coach marks and ⚙ Settings dialog. Reads a context snapshot from campaign.js after each render; never changes game state; "Take me there" clicks existing nav buttons. Progress in localStorage `ares.first-light.tutorial.v1` |
 | `web/solar-system.js`, `web/solar-system.css` | View-only solar-system dialog, schematic SVG planets/orbits, current hub and in-flight traffic details, pan/zoom; campaign.js owns navigation and keyboard/focus handling |
+| `web/planet-music.js` | Campaign soundtrack, Web Audio playback, crossfades and browser preferences. Bundled Creative Commons recordings live in `web/music/`. |
 | `web/planet-map.js` | Isometric Canvas2D rendering, drag pan, zoom, minimap, selection, Python-supplied biomes/elevation, ambient motion, and building art. No game state mutation |
 | `ares/industry.py` | Factory recipes, supplier adjacency, reserve policy, repair and fitting values |
 | `ares/surface.py` | Seeded natural regions, elevation, biome metadata, coastal access and shared nominal production rules |
@@ -115,6 +116,8 @@ The engine's one resource-allocation plan underlies production, forecasts, and e
 5. After the Sol resolves, apply health consequences and storage caps. A just-built structure starts operating on the **next** Sol.
 
 The priority is a transparent game rule, not an asserted NASA operating procedure.
+
+The music player follows the world on screen and previews playable bodies in the solar navigator. It loads on demand after a user gesture, loops decoded audio buffers, retains the last two decoded tracks, and suspends playback while muted or hidden. Music preferences are separate from campaign state. The optional authoring script `tools/render_planet_music.py` fetches the nine pinned source recordings listed in `tools/planet_recordings.json`, checks their hashes, then uses FFmpeg to write gain-adjusted MP3s and a plain-text credit list for Settings.
 
 ## Development checks
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {createPlanetMusic} from '../web/planet-music.js';
 import {readFileSync} from 'node:fs';
 import {setMaxListeners} from 'node:events';
 import {mountPlanetMap} from '../web/planet-map.js';
@@ -130,7 +131,7 @@ const {default:vm}=await import('node:vm');
 const handlers={},requests=[],actions=[];
 const el={dataset:{},tagName:'BUTTON',inert:false,style:{},classList:{},setAttribute(){},focus(){},closest(){return null},querySelector(){return el},querySelectorAll(){return []}};
 const app={...el,innerHTML:'',addEventListener(type,callback){handlers[type]=callback}};
-const controllerContext=vm.createContext({badgeCount,console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,localStorage:{getItem(){return null},setItem(){}},document:{activeElement:el,querySelector(s){return s==='#app'?app:el},querySelectorAll(){return []},addEventListener(){}},mapProps:{},mountPlanetMap(canvas,mini,props){controllerContext.mapProps=props;return {}},mountSolarSystem(){return {destroy(){}}},mapScreen(){return ''},solarSystemView(){return ''},fixture:structuredClone(fixture),requests,actions});
+const controllerContext=vm.createContext({createPlanetMusic,badgeCount,console,Date,Math,Number,String,JSON,Map,Set,Promise,setTimeout,clearTimeout,localStorage:{getItem(){return null},setItem(){}},document:{activeElement:el,querySelector(s){return s==='#app'?app:el},querySelectorAll(){return []},addEventListener(){}},mapProps:{},mountPlanetMap(canvas,mini,props){controllerContext.mapProps=props;return {}},mountSolarSystem(){return {destroy(){}}},mapScreen(){return ''},solarSystemView(){return ''},fixture:structuredClone(fixture),requests,actions});
 let source=readFileSync(new URL('../web/campaign.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/initialize\(\);\s*$/,'');
 source+=`\nstate=fixture.state;catalog=fixture.catalog;selectedWorld='earth';selectedHub='H1';selectedTile=mapCore();modal=null;guideHidden=true;refreshQuote=()=>Promise.resolve();\napi=(path,payload)=>path.endsWith('/advice')?Promise.resolve({ok:true,items:[],counts:{critical:0,warning:0}}):new Promise(resolve=>requests.push({path,payload,resolve}));perform=async(action,args)=>actions.push({action,args});globalThis.inspectState=()=>({selectedTile,selectedBuilding,inspection,mapMotion});globalThis.selectMapTile=selectMapTile;`;
 vm.runInContext(source,controllerContext);
