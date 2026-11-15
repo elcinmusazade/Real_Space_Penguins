@@ -5,6 +5,7 @@ import unittest
 
 from ares import faults
 from ares.fault_data import FAULT_COMPUTERS, FAULT_EXAMPLE_RULES, FAULT_SCENARIOS
+from ares.faults import ORIGINAL_SCENARIOS
 
 
 def cond(sensor, op, value):
@@ -58,7 +59,7 @@ class SimulationTests(unittest.TestCase):
 
     def test_good_rules_beat_baseline_and_pass_all(self):
         result = faults.run_tests({"computer": "standard", "rules": [RADIATION_SAFE, CAMERA_SPARE, LOW_POWER_SAFE]})
-        self.assertEqual(result["passed"], len(FAULT_SCENARIOS))
+        self.assertEqual(result["passed"], len(ORIGINAL_SCENARIOS))
         for scenario in result["results"]:
             self.assertGreaterEqual(scenario["science"], scenario["baseline"]["science"])
 

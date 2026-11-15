@@ -15,7 +15,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__
-from . import advice, engine, campaign, faults, research
+from . import advice, engine, campaign, faults, research, ship
+from .campaign_data import ARRIVAL_SCENARIO, PAYLOADS, PLANET_DANGERS
 from .campaign_data import campaign_catalog
 
 
@@ -42,6 +43,8 @@ STATIC_TYPES = {
     "tutorial.css": "text/css; charset=utf-8",
     "advisor.js": "text/javascript; charset=utf-8",
     "advisor.css": "text/css; charset=utf-8",
+    "ship-view.js": "text/javascript; charset=utf-8",
+    "shipyard.css": "text/css; charset=utf-8",
     "bridge.js": "text/javascript; charset=utf-8",
     "engine-view.js": "text/javascript; charset=utf-8",
     "art.js": "text/javascript; charset=utf-8",
@@ -106,7 +109,21 @@ class GameHandler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "Expected a JSON object."}, HTTPStatus.BAD_REQUEST)
             return
         if path == "/api/campaign/faults/test":
-            result = faults.run_tests(payload.get("design"))
+            world = payload.get("world")
+            plan = payload.get("ship") if isinstance(payload.get("ship"), dict) else None
+            if world is not None and world not in ARRIVAL_SCENARIO:
+                self._json({"ok": False, "error": "Unknown destination."}, HTTPStatus.BAD_REQUEST)
+                return
+            profile = None
+            if world and plan is not None:
+                parts, error = ship.validate_parts(plan.get("parts"))
+                payload_list = plan.get("payload") if isinstance(plan.get("payload"), list) else []
+                objective = plan.get("objective") if plan.get("objective") in ("surface", "orbital", "survey") else "surface"
+                if error or any(p not in PAYLOADS for p in payload_list):
+                    self._json({"ok": False, "error": error or "Unknown payload."}, HTTPStatus.BAD_REQUEST)
+                    return
+                profile = ship.sim_profile({"parts": parts, "payload": payload_list}, world, objective)
+            result = faults.run_tests(payload.get("design"), PLANET_DANGERS[world] if world else None, profile)
             self._json(result, HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST)
             return
         if path.startswith("/api/campaign/"):

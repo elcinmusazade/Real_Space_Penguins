@@ -17,10 +17,10 @@ from hashlib import sha256
 from math import ceil
 from typing import Any
 
-from . import faults, flight, orders, surface
+from . import faults, flight, orders, ship, surface
 from . import research as research_rules
 from .campaign_data import (
-    ARRIVAL_SCENARIO, BUDGET_MAX, BUDGET_MIN, BUDGET_START, BUILDINGS, DARK_TURNS_TO_LOSE,
+    ARRIVAL_SCENARIO, LEGACY_ARRIVAL_SCENARIO, PLANET_DANGERS, BUDGET_MAX, BUDGET_MIN, BUDGET_START, BUILDINGS, DARK_TURNS_TO_LOSE,
     ENGINES, EXAMPLE_ORDERS, FORECAST_LEAD, GOALS, HAZARDS, HULLS, LAUNCH_VEHICLES, MAX_RESOURCE,
     ATMOSPHERIC_WORLDS, PAYLOADS, PREPARE_COST, REPAIR_COST, RESEARCH, RESOURCE_KEYS, REVIEW_EVERY, ROUTES,
     SCENARIO_INTENSITY, TRAJECTORIES, WEAR, WORLDS, MAP_SIZE,
@@ -139,6 +139,7 @@ def _upgrade_v3(state: dict) -> None:
     state["version"] = VERSION
     state.setdefault("budget", BUDGET_START)
     state.setdefault("software", {"computer": "standard", "rules": deepcopy(FAULT_EXAMPLE_RULES)})
+    state.setdefault("softwareProfiles", {})
     state.setdefault("orders", deepcopy(EXAMPLE_ORDERS))
     state.setdefault("forecasts", [])
     state.setdefault("goals", [{"id": g["id"], "status": "open"} for g in GOALS])
@@ -315,6 +316,9 @@ def _validate_v3(state: dict, hub_ids: set) -> str | None:
         return "Invalid programme budget."
     if not faults.validate_design(state.get("software"))["ok"]:
         return "Invalid flight software."
+    profiles = state.get("softwareProfiles", {})
+    if not isinstance(profiles, dict) or any(w not in WORLDS or not faults.validate_design(d)["ok"] for w, d in profiles.items()):
+        return "Invalid planet flight software."
     if not orders.validate(state.get("orders"), state["tech"])["ok"]:
         return "Invalid standing orders."
     for hub in state["hubs"]:
@@ -390,13 +394,25 @@ def _lost_site_hub(state: dict, world: str, site: str) -> dict | None:
     return next((h for h in state["hubs"] if h["world"] == world and h["kind"] == "surface" and h["site"] == site and h["status"] == "lost"), None)
 
 
-def _software_test(software: dict, world: str) -> dict:
-    scenario = ARRIVAL_SCENARIO[world]
-    nominal = faults.simulate(software, scenario, 1.0)
-    harsh = faults.simulate(software, scenario, SCENARIO_INTENSITY[1])
-    return {"scenario": scenario, "name": nominal["name"], "description": nominal["description"],
-            "passedNominal": nominal["passed"], "passedHarsh": harsh["passed"],
-            "science": nominal["science"], "target": nominal["target"], "lost": nominal["lost"]}
+def software_for(state: dict, world: str) -> dict:
+    """The rule set a ship flying to `world` carries: that planet's own, else the shared default."""
+    return state.get("softwareProfiles", {}).get(world) or state["software"]
+
+
+def dangers_for(world: str, design: dict | None) -> list[str]:
+    """The dangers a ship may meet at `world`. Designs from before ship parts keep their single old danger."""
+    return [LEGACY_ARRIVAL_SCENARIO[world]] if design is None or ship.legacy(design) else list(PLANET_DANGERS[world])
+
+
+def _software_test(software: dict, world: str, design: dict | None = None, objective: str = "surface", own: bool = False) -> dict:
+    """Lab-test the rules against every danger of the planet, flying this ship. All must pass."""
+    profile = ship.sim_profile(design, world, objective)
+    runs = [(faults.simulate(software, s, 1.0, profile), faults.simulate(software, s, SCENARIO_INTENSITY[1], profile)) for s in dangers_for(world, design)]
+    worst = next((n for n, _ in runs if not n["passed"]), runs[0][0])
+    return {"scenario": worst["scenario"], "name": " / ".join(n["name"] for n, _ in runs), "description": worst["description"],
+            "dangers": [{"scenario": n["scenario"], "name": n["name"], "passed": n["passed"], "harsh": h["passed"], "lost": n["lost"], "science": n["science"], "target": n["target"]} for n, h in runs],
+            "passedNominal": all(n["passed"] for n, _ in runs), "passedHarsh": all(h["passed"] for _, h in runs), "ownRules": own,
+            "science": worst["science"], "target": worst["target"], "lost": any(n["lost"] for n, _ in runs), "hint": worst["hint"]}
 
 
 def mission_quote(state: dict, design: Any) -> dict:
@@ -472,7 +488,13 @@ def mission_quote(state: dict, design: Any) -> dict:
             return {"ok": False, "error": "Science missions need science instruments or a survey station."}
         site = "Remote Survey"
     normalized = {**design, "site": site, "vehicle": vehicle, "propellantKg": propellant, "payload": list(payload)}
-    computer = state["software"]["computer"]
+    if "parts" in design:
+        parts, error = ship.validate_parts(design["parts"])
+        if error:
+            return {"ok": False, "error": error}
+        normalized["parts"] = parts
+    software_design = software_for(state, world)
+    computer = software_design["computer"]
     checked = flight.assess(state, normalized, source["world"], computer)
     if not checked["ok"]:
         return {"ok": False, "error": checked["error"]}
@@ -483,10 +505,13 @@ def mission_quote(state: dict, design: Any) -> dict:
     orbital_bonus = _has_orbital(state, source["world"]) or _has_orbital(state, world)
     if "propulsion" in state["tech"] or orbital_bonus:
         fuel = max(1, ceil(fuel * (0.85 if "propulsion" in state["tech"] else 1) * (0.82 if orbital_bonus else 1)))
-    materials = hull["materials"] + engine["materials"] + sum(PAYLOADS[p]["materials"] for p in payload)
-    credits = hull["credits"] + FAULT_COMPUTERS[computer]["cost"] + (12 if kind == "surface" else 5)
+    part_costs = {"materials": 0, "credits": 0} if ship.legacy(normalized) else ship.totals(normalized["parts"])
+    materials = hull["materials"] + engine["materials"] + sum(PAYLOADS[p]["materials"] for p in payload) + part_costs["materials"]
+    credits = hull["credits"] + FAULT_COMPUTERS[computer]["cost"] + (12 if kind == "surface" else 5) + part_costs["credits"]
     credits += LAUNCH_VEHICLES[vehicle]["credits"] if from_earth else 9 * max(1, round(base["transferDays"] / 90))
-    software = _software_test(state["software"], world)
+    software = _software_test(software_design, world, normalized, kind, world in state.get("softwareProfiles", {}))
+    relays = {h["world"] for h in state["hubs"] if h["kind"] == "orbital" and _active(h)}
+    fit = ship.fit(normalized, world, kind, world in relays)
     return {
         "ok": True, "source": source["id"], "destination": world,
         "objective": kind, "site": site, "rescue": rescue["id"] if rescue else None,
@@ -495,6 +520,7 @@ def mission_quote(state: dict, design: Any) -> dict:
         "turns": checked["turns"], "outcome": checked["outcome"], "checks": checked["checks"],
         "transfer": checked["transfer"], "arc": checked["arc"], "numbers": numbers, "vehicle": checked["vehicle"],
         "software": software, "lightMinutes": flight.light_minutes(world, state["turn"]),
+        "fit": fit, "fitAll": ship.fit_all(normalized, kind, relays), "parts": normalized.get("parts"),
         "windows": flight.upcoming(world, state["turn"]) if from_earth else [],
         "arrivalTurn": state["turn"] + checked["turns"],
         "affordable": source["stocks"]["materials"] >= materials and source["stocks"]["fuel"] >= fuel and state["credits"] >= credits,
@@ -524,13 +550,15 @@ def _launch(state: dict, design: Any, confirm: Any = False) -> dict:
     state["credits"] -= quote["credits"]
     mission_id = _next_id(state, "M")
     stored = {**deepcopy(design), "site": quote["site"], "vehicle": design.get("vehicle", "atlas_v_401"), "propellantKg": quote["numbers"]["propellantKg"]}
+    if quote["parts"]:
+        stored["parts"] = dict(quote["parts"])
     mission = {
         "id": mission_id, "source": source["id"], "destination": quote["destination"],
         "objective": quote["objective"], "site": quote["site"],
         "design": stored, "departed": state["turn"],
         "arrivesAt": state["turn"] + quote["turns"], "status": "in_flight",
         "riskPercent": 0, "result": None, "outcome": None, "report": [],
-        "launchOutcome": "go", "software": deepcopy(state["software"]),
+        "launchOutcome": "go", "software": deepcopy(software_for(state, quote["destination"])), "fit": quote["fit"],
         "intensity": round(SCENARIO_INTENSITY[0] + (SCENARIO_INTENSITY[1] - SCENARIO_INTENSITY[0]) * _roll(state["seed"], mission_id, "intensity"), 3),
         "transfer": quote["transfer"], "numbers": quote["numbers"], "arc": quote["arc"],
     }
@@ -970,9 +998,11 @@ def _arrive_mission(state: dict, mission: dict) -> None:
     world, objective, payload = mission["destination"], mission["objective"], list(mission["design"]["payload"])
     name = WORLDS[world]["name"]
     launch_outcome = mission.get("launchOutcome", "go")
-    software = mission.get("software") or state["software"]
-    scenario = ARRIVAL_SCENARIO[world]
-    sim = faults.simulate(faults.validate_design(software)["design"], scenario, mission.get("intensity", 1.0))
+    software = mission.get("software") or software_for(state, world)
+    dangers = dangers_for(world, mission["design"])
+    scenario = dangers[min(len(dangers) - 1, int(_roll(state["seed"], mission["id"], "danger") * len(dangers)))]
+    profile = ship.sim_profile(mission["design"], world, objective)
+    sim = faults.simulate(faults.validate_design(software)["design"], scenario, mission.get("intensity", 1.0), profile)
     mission["faultTest"] = {"scenario": scenario, "name": sim["name"], "passed": sim["passed"], "lost": sim["lost"],
                             "science": sim["science"], "target": sim["target"], "brownouts": sim["brownouts"],
                             "fired": sum(sim["fireCounts"]), "events": [e for row in sim["timeline"] for e in row["events"]][:6]}
@@ -1007,6 +1037,23 @@ def _arrive_mission(state: dict, mission: dict) -> None:
     else:
         outcome = "nominal"
         text = "Arrived as planned."
+    # Planet fit (warn-only at launch): a ship not built for this world arrives damaged.
+    if not ship.legacy(mission["design"]):
+        relay_here = any(h["world"] == world and h["kind"] == "orbital" and _active(h) for h in state["hubs"])
+        report = ship.fit(mission["design"], world, objective, relay_here)
+        mission["fit"] = report
+        for check in report["checks"]:
+            if check["status"] != "ok":
+                _report(mission, "fit", f"{check['label']}: {check['detail']}", False if check["status"] == "fail" else None)
+        unfit = [c["label"].lower() for c in report["checks"] if c["status"] == "fail" and c["id"] != "comms"]
+        if unfit and outcome != "flyby":
+            note = f"The ship was not built for {name} ({', '.join(unfit)})."
+            text = f"Arrived damaged. {note}" if outcome == "nominal" else f"{text} {note}"
+            outcome = "degraded"
+        antenna = next(c for c in report["checks"] if c["id"] == "comms")["status"]
+        if antenna != "ok":
+            bonus = bonus // 2 if antenna == "fail" else bonus * 3 // 4
+            text += " A weak antenna sent less science home."
     consequence = None
     if outcome != "flyby" and objective in ("surface", "orbital"):
         margin = mission.get("numbers", {}).get("dvMargin", 1.0)
@@ -1136,11 +1183,23 @@ def _repair(state: dict, hub_id: Any, tile_id: Any) -> dict:
 
 
 def _set_software(state: dict, args: dict) -> dict:
+    """Save the shared default rules, or one planet's own rules (args.world). args.clear drops a planet's rules."""
+    world = args.get("world")
+    if world is not None and world not in WORLDS:
+        return _fail(state, "Choose a valid planet.")
+    profiles = state.setdefault("softwareProfiles", {})
+    if world and args.get("clear") is True:
+        profiles.pop(world, None)
+        return {"ok": True, "state": state, "message": f"{WORLDS[world]['name']} now uses the default rules."}
     checked = faults.validate_design({"computer": args.get("computer"), "rules": args.get("rules")})
     if not checked["ok"]:
         return _fail(state, checked["error"])
-    state["software"] = checked["design"]
-    return {"ok": True, "state": state, "message": f"Flight software saved: {len(checked['design']['rules'])} rules on the {FAULT_COMPUTERS[checked['design']['computer']]['name'].lower()}."}
+    if world:
+        profiles[world] = checked["design"]
+    else:
+        state["software"] = checked["design"]
+    where = f"{WORLDS[world]['name']} rules" if world else "Default rules"
+    return {"ok": True, "state": state, "message": f"{where} saved: {len(checked['design']['rules'])} rules on the {FAULT_COMPUTERS[checked['design']['computer']]['name'].lower()}."}
 
 
 def _set_orders(state: dict, args: dict) -> dict:

@@ -208,7 +208,12 @@ TCM_DV_KMS = 0.05  # trajectory-correction allowance for every mission (game est
 BOILOFF_PER_TURN = 0.02  # cryogenic propellant lost per turn of flight beyond 4 turns (game estimate)
 
 # Fault scenario that the cruise/arrival phase plays out at each destination.
-ARRIVAL_SCENARIO = {"earth": "eclipse", "mars": "dust", "venus": "camera", "mercury": "eclipse", "europa": "radiation", "jupiter": "radiation", "saturn": "eclipse", "uranus": "eclipse", "neptune": "camera"}
+# Designs saved before ship parts existed keep the dangers they were balanced against.
+LEGACY_ARRIVAL_SCENARIO = {"earth": "eclipse", "mars": "dust", "venus": "camera", "mercury": "eclipse", "europa": "radiation", "jupiter": "radiation", "saturn": "eclipse", "uranus": "eclipse", "neptune": "camera"}
+ARRIVAL_SCENARIO = {"earth": "reentry", "mars": "dust", "venus": "heat", "mercury": "sunside", "europa": "europa", "jupiter": "belts", "saturn": "rings", "uranus": "cold", "neptune": "wind"}
+# Every destination has two dangers: the lab test runs both, a mission meets one (seeded).
+SECOND_DANGER = {"earth": "hurricane", "mars": "flare", "venus": "superrotation", "mercury": "flare_close", "europa": "plumes", "jupiter": "great_storm", "saturn": "hexagon", "uranus": "dark_rings", "neptune": "deep_cold"}
+PLANET_DANGERS = {world: [ARRIVAL_SCENARIO[world], SECOND_DANGER[world]] for world in ARRIVAL_SCENARIO}
 SCENARIO_INTENSITY = (0.85, 1.25)  # actual conditions vary per mission around the lab test
 
 # Surface hazards (game values). chance = per-turn chance a forecast is issued
@@ -276,6 +281,7 @@ def campaign_catalog() -> dict:
     """Catalog plus the V3 flight, fault and programme tables."""
     from .fault_data import FAULT_COMPUTERS, FAULT_EXAMPLE_RULES, FAULT_INSTRUMENTS, FAULT_RESPONSES, FAULT_SENSORS, FAULT_SCENARIOS
     from .flight import PROPELLANT_MAX_KG, table
+    from .ship import catalog as ship_catalog
     from .surface import BIOMES, landscape
     base = catalog()
     base["biomes"] = BIOMES
@@ -287,10 +293,11 @@ def campaign_catalog() -> dict:
         "faults": {
             "sensors": FAULT_SENSORS, "responses": FAULT_RESPONSES, "instruments": FAULT_INSTRUMENTS,
             "scenarios": {k: {"name": v["name"], "description": v["description"]} for k, v in FAULT_SCENARIOS.items()},
-            "arrivalScenario": ARRIVAL_SCENARIO, "limits": {"conditions": 2, "for": 3},
+            "arrivalScenario": ARRIVAL_SCENARIO, "planetDangers": PLANET_DANGERS, "limits": {"conditions": 2, "for": 3},
             "example": {"computer": "standard", "rules": FAULT_EXAMPLE_RULES},
         },
         "orbitTracks": table()["orbitTracks"], "propellantMaxKg": PROPELLANT_MAX_KG,
+        "ship": ship_catalog(),
         "lightMinutes": {**{world: [row["lightMinutes"] for row in rows] for world, rows in table()["destinations"].items()}, **{w: [v] for w, v in ESTIMATED_LIGHT_MINUTES.items()}},
         "estimatedLightWorlds": sorted(ESTIMATED_LIGHT_MINUTES), "gmatDestinations": list(table()["destinations"]),
         "platformFacilities": {"drill": "Atmospheric Refinery", "extractor": "Cloud Condenser", "command": "Platform Core"},

@@ -52,10 +52,15 @@ class AdviceTests(unittest.TestCase):
         self.assertTrue(any(i["action"] and i["action"]["type"] == "plan" for i in result["items"]))
 
     def test_flight_software_advice_follows_the_lab_test(self):
-        self.assertTrue(any("Flight software fails" in t for t in titles(advice.advise(self.state))))
+        self.assertTrue(any("Flight rules fail" in t for t in titles(advice.advise(self.state))))
         good = deepcopy(self.state)
-        good["software"] = GOOD_SOFTWARE
-        self.assertFalse([t for t in titles(advice.advise(good)) if "Flight software fails" in t])
+        safe = {"when": [cond("battery", "<", 30)], "for": 1, "then": "safe_mode"}
+        good["softwareProfiles"] = {
+            "earth": {"computer": "standard", "rules": [{"when": [cond("wind", ">", 55)], "for": 1, "then": "descend"},
+                                                        {"when": [cond("storage", ">", 60)], "for": 1, "then": "compress"}, safe]},
+            "mars": {"computer": "standard", "rules": [{"when": [cond("radiation", ">", 75)], "for": 1, "then": "safe_mode"}, safe]},
+        }
+        self.assertFalse([t for t in titles(advice.advise(good)) if "Flight rules fail" in t])
 
     def test_projected_supply_shortage_is_urgent(self):
         result = advice.advise(self.crewed(oxygen=2, water=40, food=40))

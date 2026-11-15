@@ -23,6 +23,7 @@ from .campaign_data import (
     G0, HULLS, LAUNCH_VEHICLES, PAYLOADS, PHYSICS, ROUTES, TCM_DV_KMS, TRAJECTORIES, TURN_DAYS,
 )
 from .fault_data import FAULT_COMPUTERS
+from . import ship
 
 TABLE_PATH = Path(__file__).resolve().parent / "data" / "campaign_windows.json"
 PROPELLANT_MAX_KG = 9000
@@ -121,8 +122,9 @@ def upcoming(world: str, turn: int, count: int = 12) -> list[dict]:
 def masses(design: dict, computer: str) -> dict:
     hull, engine = HULLS[design["hull"]], ENGINES[design["engine"]]
     carried = engine["mass"] + sum(PAYLOADS[p]["mass"] for p in design["payload"])
-    dry = hull["dryKg"] + carried + FAULT_COMPUTERS[computer]["mass"] * 10
-    return {"carried": carried, "capacity": hull["capacity"], "dry": dry}
+    parts = 0 if ship.legacy(design) else ship.totals(design["parts"])["mass"]
+    dry = hull["dryKg"] + carried + parts + FAULT_COMPUTERS[computer]["mass"] * 10
+    return {"carried": carried, "capacity": hull["capacity"], "dry": dry, "parts": parts}
 
 
 def assess(state: dict, design: dict, source_world: str, computer: str) -> dict:

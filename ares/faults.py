@@ -103,16 +103,26 @@ def _env(scenario: dict, turn: int, intensity: float = 1.0) -> dict:
     dust = scenario.get("dust", [0] * FAULT_TURNS)[i]
     radiation = scenario.get("radiation", [10] * FAULT_TURNS)[i]
     solar = scenario.get("solarFactor", [1] * FAULT_TURNS)[i]
+    temperature = scenario["temperature"][i] if "temperature" in scenario else None
+    impacts = scenario.get("impacts", [0] * FAULT_TURNS)[i]
+    wind = scenario.get("wind", [0] * FAULT_TURNS)[i]
+    blackout = turn in scenario.get("blackout", [])
     return {
         "dust": max(0, min(100, round(dust * intensity))),
         "radiation": max(0, min(100, round(10 + (radiation - 10) * intensity))),
-        "solarFactor": max(0.1, min(1.0, 1 - (1 - solar) * intensity)),
-        "contact": turn % scenario["contactEvery"] == 0,
+        "solarFactor": max(0.02, min(1.0, 1 - (1 - solar) * intensity)),
+        "temperature": None if temperature is None else round(20 + (temperature - 20) * intensity),
+        "impacts": max(0, min(100, round(impacts * intensity))),
+        "wind": max(0, min(100, round(wind * intensity))),
+        "contact": turn % scenario["contactEvery"] == 0 and not blackout,
+        "blackout": blackout,
     }
 
 
 def _holds(cond: dict, sensors: dict) -> bool:
-    reading = sensors[cond["sensor"]]
+    reading = sensors.get(cond["sensor"])
+    if reading is None:  # this spacecraft has no such sensor (e.g. no radar fitted)
+        return False
     if cond["op"] == "is":
         return reading is cond["value"]
     return reading < cond["value"] if cond["op"] == "<" else reading > cond["value"]
@@ -133,11 +143,25 @@ def describe_rule(rule: dict) -> str:
     return f"WHEN {' AND '.join(parts)}{hold} THEN {action}"
 
 
-def simulate(design: dict, scenario_id: str, intensity: float = 1.0) -> dict:
-    """Run one validated design through one scenario. Pure and deterministic."""
+# The old generic test probe: every instrument, no heat/cold limits, no shielding.
+GENERIC_SHIP = {"solar": None, "steady": 0, "batteryBonus": 0, "radReduction": 0.0,
+                "thermal": [-300, 600], "downlink": 1.0, "instruments": list(FAULT_INSTRUMENTS)}
+
+HEAT_MARGIN, COLD_MARGIN = 60, 40
+
+CLAIM_KEYS = {"downlink_boost": "downlink", "compress": "compress", "stow_arrays": "arrays", "switch_backup": "backup",
+              "thermal_protect": "thermal", "heaters_on": "heaters", "shield_attitude": "attitude", "descend": "altitude"}
+
+
+def simulate(design: dict, scenario_id: str, intensity: float = 1.0, ship: dict | None = None) -> dict:
+    """Run one validated design through one scenario, flying `ship` (see ship.sim_profile). Pure and deterministic."""
     scenario = FAULT_SCENARIOS[scenario_id]
     sc, computer, rules = FAULT_SPACECRAFT, FAULT_COMPUTERS[design["computer"]], design["rules"]
-    battery, storage = float(sc["batteryStart"]), 0.0
+    craft = {**GENERIC_SHIP, **(ship or {})}
+    fitted = [k for k in FAULT_INSTRUMENTS if k in craft["instruments"]]
+    solar_full = sc["solar"] if craft["solar"] is None else craft["solar"]
+    battery_max = float(sc["batteryMax"] + craft["batteryBonus"])
+    battery, storage = min(battery_max, float(sc["batteryStart"] + craft["batteryBonus"])), 0.0
     stored = {key: 0.0 for key in FAULT_INSTRUMENTS}
     returned = {key: 0.0 for key in FAULT_INSTRUMENTS}
     data_lost, arrays = 0.0, 100.0
@@ -145,14 +169,18 @@ def simulate(design: dict, scenario_id: str, intensity: float = 1.0) -> dict:
     brownouts, backup_used, lost = 0, False, False
     camera_fault = "cameraFaultFrom" in scenario
     streaks, fire_counts = [0] * len(rules), [0] * len(rules)
+    damage = {"radiation": 0.0, "heat": 0.0, "cold": 0.0, "impacts": 0.0, "wind": 0.0}
     timeline = []
+    lo, hi = craft["thermal"]
 
     for turn in range(1, FAULT_TURNS + 1):
         env = _env(scenario, turn, intensity)
+        radiation = round(10 + (env["radiation"] - 10) * (1 - craft["radReduction"]))
         sensors = {
-            "battery": round(battery), "storage": round(storage / sc["storageMax"] * 100),
-            "radiation": env["radiation"], "dust": env["dust"], "contact": env["contact"],
-            **{f"{key}_health": round(value) for key, value in health.items()},
+            "battery": round(battery / battery_max * 100), "storage": round(storage / sc["storageMax"] * 100),
+            "radiation": radiation, "dust": env["dust"], "contact": env["contact"],
+            "temperature": env["temperature"], "impacts": env["impacts"], "wind": env["wind"],
+            **{f"{key}_health": (round(health[key]) if key in fitted else None) for key in FAULT_INSTRUMENTS},
         }
         fired, events, claimed = [], [], {}
         for index, rule in enumerate(rules):
@@ -165,7 +193,7 @@ def simulate(design: dict, scenario_id: str, intensity: float = 1.0) -> dict:
             elif response in ("instrument_off", "instrument_on"):
                 keys = [f"inst:{rule['target']}"]
             else:
-                keys = [{"downlink_boost": "downlink", "compress": "compress", "stow_arrays": "arrays", "switch_backup": "backup"}[response]]
+                keys = [CLAIM_KEYS[response]]
             if keys[0] in claimed:
                 fired.append({"rule": index, "status": "blocked", "by": claimed[keys[0]]})
                 continue
@@ -182,29 +210,34 @@ def simulate(design: dict, scenario_id: str, intensity: float = 1.0) -> dict:
             fired.append({"rule": index, "status": "applied", **({"note": note} if note else {})})
 
         def instrument_on(key: str) -> bool:
+            if key not in fitted:
+                return False
             owner = claimed.get(f"inst:{key}")
             if owner is not None and rules[owner]["then"] in ("safe_mode", "instrument_off"):
                 return False
             return health[key] > 0
 
         safe = "mode" in claimed
-        stowed = "arrays" in claimed
-        compress = "compress" in claimed
-        boost = "downlink" in claimed
+        stowed, compress, boost = "arrays" in claimed, "compress" in claimed, "downlink" in claimed
+        protect, heaters = "thermal" in claimed, "heaters" in claimed
+        attitude, deeper = "attitude" in claimed, "altitude" in claimed
         on = [key for key in FAULT_INSTRUMENTS if instrument_on(key)]
 
-        solar = sc["solar"] * env["solarFactor"] * (1 - env["dust"] / 100 * 0.8) * arrays / 100 * (0.3 if stowed else 1)
-        base_load = sc["busLoad"] + computer["power"]
-        link_power = (sc["boostPower"] if boost else sc["downlinkPower"]) if env["contact"] else 0
-        if boost and not env["contact"]:
+        solar = solar_full * env["solarFactor"] * (1 - env["dust"] / 100 * 0.8) * arrays / 100
+        solar *= (0.3 if stowed else 1) * (0.5 if protect else 1) * (0.6 if deeper else 1)
+        base_load = sc["busLoad"] + computer["power"] + (6 if heaters else 0)
+        contact = env["contact"] and not attitude
+        link_power = (sc["boostPower"] if boost else sc["downlinkPower"]) if contact else 0
+        if boost and not contact:
             events.append("High-power downlink requested, but no ground station was in view.")
         load = base_load + link_power + sum(FAULT_INSTRUMENTS[k]["power"] for k in on)
-        new_battery = battery + solar - load
+        supply = solar + craft["steady"]
+        new_battery = battery + supply - load
 
         brownout = new_battery < 0
         if brownout:
             brownouts += 1
-            battery = max(0.0, battery + solar - base_load)
+            battery = max(0.0, battery + supply - base_load)
             events.append("Brownout: battery empty, all instruments and the radio shut down.")
             on = []
             if brownouts >= sc["brownoutsToLose"]:
@@ -219,6 +252,8 @@ def simulate(design: dict, scenario_id: str, intensity: float = 1.0) -> dict:
             science = data * spec["science"]
             if compress:
                 data, science = data * 0.5, science * 0.8
+            if protect:
+                data, science = data * 0.75, science * 0.75
             room = sc["storageMax"] - storage
             if data > room:
                 kept = room / data if data else 0
@@ -229,20 +264,40 @@ def simulate(design: dict, scenario_id: str, intensity: float = 1.0) -> dict:
         if data_lost and storage >= sc["storageMax"] - 1e-9 and on:
             events.append("Storage full: new data was discarded.")
 
-        for key in on:
-            if env["radiation"] > 60:
-                health[key] = max(0.0, health[key] - (env["radiation"] - 60) * 1.2)
-            if key == "camera" and camera_fault and turn >= scenario["cameraFaultFrom"]:
-                health[key] = max(0.0, health[key] - 20 * intensity)
-        if env["radiation"] > 60 and on:
-            events.append(f"Radiation damaged: {', '.join(FAULT_INSTRUMENTS[k]['name'] for k in on)}.")
-        if env["radiation"] > 80 and not safe and not brownout:
+        def harm(kind: str, amount: float, why: str) -> None:
+            if amount <= 0 or not on:
+                return
+            for key in on:
+                health[key] = max(0.0, health[key] - amount)
+            damage[kind] += amount
+            events.append(f"{why}: {', '.join(FAULT_INSTRUMENTS[k]['name'] for k in on)} damaged.")
+
+        if radiation > 60:
+            harm("radiation", (radiation - 60) * 1.2, "Radiation")
+        if "camera" in on and camera_fault and turn >= scenario["cameraFaultFrom"]:
+            health["camera"] = max(0.0, health["camera"] - 20 * intensity)
+        if radiation > 80 and not safe and not brownout:
             storage = storage / 2
             stored = {key: value / 2 for key, value in stored.items()}
             events.append("Computer upset: half the stored data was corrupted.")
+        # Instruments sit outside the ship's heat control, so they suffer near its limits too.
+        temp = env["temperature"]
+        if temp is not None and temp > hi - HEAT_MARGIN and not protect:
+            harm("heat", min(45.0, 25 + max(0, temp - hi) * 0.3), "Overheating")
+        if temp is not None and temp < lo + COLD_MARGIN and not heaters:
+            harm("cold", 20.0 + (8 if temp < lo else 0), "Frozen")
+            battery = max(0.0, battery - (12 if temp < lo else 4))
+        if env["impacts"] > 40 and not attitude:
+            arrays = max(20.0, arrays - (env["impacts"] - 40) * 0.4)
+            harm("impacts", (env["impacts"] - 40) * 0.8, "Particle impacts")
+        if env["wind"] > 55 and not deeper:
+            arrays = max(20.0, arrays - 6)
+            harm("wind", (env["wind"] - 55) * 0.8, "Wind buffeting")
+        if env["blackout"]:
+            events.append("Radio blackout: no contact with Earth.")
 
-        if env["contact"] and not brownout and storage > 0:
-            rate = sc["boostDownlink"] if boost else sc["downlink"]
+        if contact and not brownout and storage > 0:
+            rate = (sc["boostDownlink"] if boost else sc["downlink"]) * craft["downlink"]
             sent = min(rate, storage)
             share = sent / storage
             for key in stored:
@@ -253,42 +308,78 @@ def simulate(design: dict, scenario_id: str, intensity: float = 1.0) -> dict:
         if env["dust"] > 60 and not stowed:
             arrays = max(20.0, arrays - 4)
             events.append("Dust scoured the exposed solar arrays.")
-        battery = min(float(sc["batteryMax"]), battery)
+        battery = min(battery_max, battery)
 
+        hazard_key = scenario.get("hazard", "dust" if "dust" in scenario else "radiation" if "radiation" in scenario else None)
+        hazard = {"temperature": min(100, abs((temp if temp is not None else 20) - 20) / 4.5), "radiation": radiation, "dust": env["dust"],
+                  "impacts": env["impacts"], "wind": env["wind"], "blackout": 100 if env["blackout"] else 0}.get(hazard_key, 0)
         timeline.append({
-            "turn": turn, "battery": round(battery), "storage": round(storage / sc["storageMax"] * 100),
-            "science": round(sum(returned.values())), "contact": env["contact"], "safe": safe,
-            "instruments": on, "fired": fired, "events": events,
+            "turn": turn, "battery": round(battery / battery_max * 100), "storage": round(storage / sc["storageMax"] * 100),
+            "science": round(sum(returned.values())), "contact": contact, "safe": safe, "hazard": round(hazard),
+            "temperature": env["temperature"], "instruments": on, "fired": fired, "events": events,
         })
         if lost:
             break
 
+    # A spacecraft without every instrument is judged against what it can collect.
+    capacity = sum(FAULT_INSTRUMENTS[k]["data"] * FAULT_INSTRUMENTS[k]["science"] for k in fitted)
+    full = sum(v["data"] * v["science"] for v in FAULT_INSTRUMENTS.values())
+    target = round(scenario["target"] * capacity / full)
     total = sum(returned.values())
     by_instrument = {key: round(value) for key, value in returned.items()}
     focus = scenario.get("instrumentTarget")
-    focus_ok = focus is None or returned[focus[0]] >= focus[1]
-    return {
+    focus_ok = focus is None or focus[0] not in fitted or returned[focus[0]] >= focus[1]
+    passed = not lost and total >= target and focus_ok
+    result = {
         "scenario": scenario_id, "name": scenario["name"], "description": scenario["description"],
-        "target": scenario["target"], "science": round(total), "byInstrument": by_instrument,
-        "instrumentTarget": {"instrument": focus[0], "science": focus[1]} if focus else None, "dataLost": round(data_lost),
+        "target": target, "science": round(total), "byInstrument": by_instrument,
+        "instrumentTarget": {"instrument": focus[0], "science": focus[1]} if focus and focus[0] in fitted else None, "dataLost": round(data_lost),
         "brownouts": brownouts, "lost": lost, "arrays": round(arrays),
-        "health": {key: round(value) for key, value in health.items()},
-        "passed": not lost and total >= scenario["target"] and focus_ok,
-        "fireCounts": fire_counts, "timeline": timeline,
+        "health": {key: round(value) for key, value in health.items() if key in fitted},
+        "passed": passed, "fireCounts": fire_counts, "timeline": timeline,
     }
+    result["hint"] = None if passed else _hint(result, damage, rules)
+    return result
 
 
-def run_tests(data: object) -> dict:
-    """Validate a design, then run it and a no-rules baseline through every scenario."""
+def _hint(result: dict, damage: dict, rules: list[dict]) -> str:
+    """One sentence on what went wrong and which kind of rule would help."""
+    first = lambda text: next((row["turn"] for row in result["timeline"] for e in row["events"] if text in e), None)
+    if result["brownouts"]:
+        return f"The battery ran flat on turn {first('Brownout')}. A rule like WHEN Battery charge below 30 THEN Enter safe mode saves power."
+    worst = max(damage, key=damage.get)
+    if damage[worst] > 0:
+        advice = {
+            "radiation": "WHEN Radiation level above 60 THEN Enter safe mode",
+            "heat": "WHEN Outside temperature above (your ship's limit) THEN Thermal protection mode",
+            "cold": "WHEN Outside temperature below (your ship's limit) THEN Heaters on",
+            "impacts": "WHEN Particle impacts above 50 THEN Shield attitude",
+            "wind": "WHEN Wind speed above 60 THEN Descend to calmer layer",
+        }[worst]
+        label = {"radiation": "Radiation", "heat": "Overheating", "cold": "Frozen", "impacts": "Particle impacts", "wind": "Wind buffeting"}[worst]
+        return f"{label} damaged the instruments from turn {first(label)}. Try {advice}."
+    if result["dataLost"]:
+        return "Data storage filled up and new data was thrown away. Try WHEN Data storage used above 60 THEN Compress data."
+    if result["instrumentTarget"] and result["byInstrument"]["camera"] < result["instrumentTarget"]["science"]:
+        return "The camera failed before finishing its mapping. Try WHEN Camera health below 70 THEN Switch to backup camera."
+    return f"Only {result['science']} of {result['target']} science came home. Keep instruments running longer, or fit a bigger antenna."
+
+
+ORIGINAL_SCENARIOS = ("dust", "radiation", "camera", "eclipse")
+
+
+def run_tests(data: object, scenarios: tuple | list | None = None, ship: dict | None = None) -> dict:
+    """Validate a design, then run it and a no-rules baseline through each scenario."""
     checked = validate_design(data)
     if not checked["ok"]:
         return checked
     design = checked["design"]
     baseline = {"computer": design["computer"], "rules": []}
     results = []
-    for scenario_id in FAULT_SCENARIOS:
-        result = simulate(design, scenario_id)
-        result["baseline"] = {key: simulate(baseline, scenario_id)[key] for key in ("science", "byInstrument", "lost", "passed")}
+    for scenario_id in scenarios or ORIGINAL_SCENARIOS:
+        result = simulate(design, scenario_id, 1.0, ship)
+        result["harsh"] = simulate(design, scenario_id, 1.25, ship)["passed"]
+        result["baseline"] = {key: simulate(baseline, scenario_id, 1.0, ship)[key] for key in ("science", "byInstrument", "lost", "passed")}
         results.append(result)
     return {
         "ok": True, "design": design,

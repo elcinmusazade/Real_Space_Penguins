@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from . import campaign, faults, flight, research
-from .campaign_data import ARRIVAL_SCENARIO, GOALS, RESEARCH, REVIEW_EVERY, WORLDS
+from . import campaign, faults, flight, research, ship
+from .campaign_data import ARRIVAL_SCENARIO, GOALS, PLANET_DANGERS, RESEARCH, REVIEW_EVERY, WORLDS
 
 LEVELS = ("critical", "warning", "opportunity", "info")
 WATCHED = ("oxygen", "water", "food", "heat", "energy")
@@ -113,16 +113,23 @@ def advise(state: dict) -> dict:
                   {"type": "tile", "hub": hub["id"], "tile": worst["id"], "label": "Show worst building"}, 3)
 
     # --- Flight software and missions -----------------------------------------------------
-    test = faults.run_tests(state["software"])
-    if test["ok"]:
-        by_scenario = {r["scenario"]: r for r in test["results"]}
-        failing = [w for w, s in ARRIVAL_SCENARIO.items() if not by_scenario[s]["passed"]]
-        if failing:
-            lost = [w for w in failing if by_scenario[ARRIVAL_SCENARIO[w]]["lost"]]
-            names = ", ".join(WORLDS[w]["name"] for w in failing)
-            _item(items, "warning", "Flight software", f"Flight software fails the lab test for {names}",
-                  ("Spacecraft would be LOST arriving at " + ", ".join(WORLDS[w]["name"] for w in lost) + ". " if lost else "") + "Fix the rules before launching there; spacecraft keep the software they launched with.",
-                  {"type": "nav", "tab": "software", "label": "Open Software"}, 2)
+    # Rules for the worlds you are flying to next, tested on a standard lander built from default parts.
+    watched = ["earth", "mars"] + sorted({m["destination"] for m in state["missions"] if m["status"] == "in_flight"} - {"earth", "mars"})
+    reference = {"parts": dict(ship.DEFAULT_PARTS), "payload": ["survey", "lab"]}
+    failing, lost = [], []
+    for world in watched:
+        rules = campaign.software_for(state, world)
+        design = faults.validate_design(rules)["design"]
+        results = [faults.simulate(design, danger, 1.0, ship.sim_profile(reference, world, "surface")) for danger in PLANET_DANGERS[world]]
+        if not all(r["passed"] for r in results):
+            failing.append(world)
+            if any(r["lost"] for r in results):
+                lost.append(world)
+    if failing:
+        names = ", ".join(WORLDS[w]["name"] for w in failing)
+        _item(items, "warning", "Flight software", f"Flight rules fail the lab test for {names}",
+              ("A standard lander would be LOST arriving at " + ", ".join(WORLDS[w]["name"] for w in lost) + ". " if lost else "") + "Open that planet's tab on the Software screen and fix its rules before launching; spacecraft keep the rules they launched with.",
+              {"type": "nav", "tab": "software", "label": "Open Software"}, 2)
     for mission in state["missions"]:
         if mission["status"] == "in_flight" and mission["arrivesAt"] == turn + 1:
             _item(items, "info", "Missions", f"{mission['id']} arrives at {WORLDS[mission['destination']]['name']} next turn",

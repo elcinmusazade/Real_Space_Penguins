@@ -8,7 +8,7 @@ re-check that good play is still rewarded and careless play still costs.
 
 import unittest
 
-from ares import campaign
+from ares import campaign, ship
 from campaign_fixtures import established_campaign
 from ares.campaign_data import MAP_SIZE
 
@@ -32,10 +32,13 @@ GOOD_ORDERS = [
 ]
 
 
-def plan(destination, objective, site, payload, hull, propellant, vehicle="atlas_v_401", trajectory="balanced"):
-    return {"source": "H1", "destination": destination, "objective": objective, "site": site,
-            "hull": hull, "engine": "chemical", "trajectory": trajectory, "payload": payload,
-            "vehicle": vehicle, "propellantKg": propellant}
+def plan(destination, objective, site, payload, hull, propellant, vehicle="atlas_v_401", trajectory="balanced", parts=None):
+    design = {"source": "H1", "destination": destination, "objective": objective, "site": site,
+              "hull": hull, "engine": "chemical", "trajectory": trajectory, "payload": payload,
+              "vehicle": vehicle, "propellantKg": propellant}
+    if parts is not None:
+        design["parts"] = {**ship.DEFAULT_PARTS, **parts}
+    return design
 
 
 def try_act(state, action, **args):
@@ -47,6 +50,9 @@ def careful(seed):
     s = established_campaign(seed)
     s = try_act(s, "setSoftware", **GOOD_SOFTWARE)
     s = try_act(s, "setOrders", rules=GOOD_ORDERS)
+    # A careful player writes Venus its own rules for the heat (planet tabs on the Software screen).
+    s = try_act(s, "setSoftware", world="venus", computer="standard", rules=GOOD_SOFTWARE["rules"] + [
+        {"when": [cond("temperature", ">", 60)], "for": 1, "then": "thermal_protect"}])
     for tile in (CORE - 2, CORE + 2, CORE - 2 * MAP_SIZE, CORE + 2 * MAP_SIZE, CORE + MAP_SIZE + 2):
         s = try_act(s, "explore", hub="H2", tile=tile)
     s = try_act(s, "construct", hub="H2", tile=CORE - 2, building="extractor")
@@ -56,9 +62,9 @@ def careful(seed):
     s = try_act(s, "construct", hub="H2", tile=CORE - MAP_SIZE - 1, building="solar")
     s = try_act(s, "assignCrew", hub="H2", index=1, assignment="survival")
     wanted = [
-        (2, plan("mars", "orbital", "", ["relay", "lab"], "scout", 600)),
-        (2, plan("mars", "surface", "Jezero Rim", ["rover", "lab"], "lander", 500)),
-        (5, plan("venus", "survey", "", ["lab"], "scout", 100)),
+        (2, plan("mars", "orbital", "", ["relay", "lab"], "scout", 600, parts={"entry": "none"})),
+        (2, plan("mars", "surface", "Jezero Rim", ["rover", "lab"], "lander", 500, parts={})),
+        (5, plan("venus", "survey", "", ["lab"], "scout", 100, parts={"entry": "none"})),
     ]
     for _ in range(TURNS):
         for forecast in s["forecasts"]:
